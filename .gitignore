@@ -1,0 +1,26 @@
+# Xcode
+.DS_Store
+build/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+
+# 临时文件
+*.tmp
+*.temp
+.cache/
+
+# 设计文件备份
+Design/backup/
+
+# IDE文件
+.vscode/settings.json

@@ -1,0 +1,80 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## 项目概述
+
+这是一个iOS猫咪合成游戏应用《猫咪合成师》，使用Swift + SwiftUI开发。应用通过遗传学算法生成各种稀有度的虚拟猫咪，用户可以收集、管理和分享自己的猫咪收藏。
+
+## 常用开发命令
+
+### 构建和运行
+- 在Xcode中打开: `open CatBreeder.xcodeproj`
+- 构建项目: 使用Xcode的Command+B或Product > Build
+- 运行项目: 使用Xcode的Command+R或Product > Run
+- 清理构建: Product > Clean Build Folder
+
+### 测试
+- 运行测试: Command+U或Product > Test
+- UI测试位于: `CatBreederUITests/`
+- 单元测试位于: `CatBreederTests/`
+
+## 核心架构
+
+### 数据模型层 (Models/)
+- **Cat.swift**: 猫咪核心数据模型，包含ID、遗传信息、外观数据和稀有度
+- **Genetics.swift**: 遗传学算法实现，定义基础颜色、稀释、花纹、白色分布等基因系统
+- **Appearance.swift**: 外观渲染系统，将遗传数据转换为视觉表现
+- **GameData.swift**: 游戏数据管理器，处理玩家进度、猫咪收藏、经验升级系统
+
+### 核心业务逻辑
+目前所有界面逻辑都在ContentView.swift中，包括：
+- **BreedingView**: 猫咪合成界面
+- **CollectionView**: 猫舍管理界面  
+- **EncyclopediaView**: 图鉴系统（待实现）
+- **SettingsView**: 设置界面
+
+### 数据持久化
+- 使用UserDefaults存储游戏数据
+- Core Data (.xcdatamodeld) 用于复杂数据存储
+- PersistenceController管理Core Data栈
+
+## 遗传学系统
+
+### 基因类型
+- **BaseColor**: 黑色、巧克力色、肉桂色、橙色
+- **Dilution**: 浓郁/淡化效果
+- **Pattern**: 纯色、虎斑、重点色、玳瑁、三花
+- **WhitePattern**: 白色分布模式（无白色、白胸、双色等）
+- **GeneticModifier**: 银色、金色、烟色、阴影基因
+
+### 稀有度计算
+稀有度基于遗传复杂度计算：
+- 普通(45%)、少见(30%)、稀有(15%)、史诗(8%)、传说(2%)
+- 复杂基因组合增加稀有度分值
+
+## 开发注意事项
+
+### 代码风格
+- 使用SwiftUI声明式语法
+- 遵循Swift命名规范
+- 使用中文注释和UI文本
+- 保持模型和视图分离
+
+### 架构改进建议
+- 创建ViewModels处理复杂业务逻辑
+- 进一步将渲染逻辑从视图中分离
+- 考虑引入依赖注入模式
+
+### 扩展方向
+- 猫咪繁育系统（两只猫咪杂交）
+- 更丰富的动画效果
+- 社交分享功能
+- 成就系统完善
+
+## 重构完成 ✅
+1. ~~ContentView.swift文件过大，需要拆分~~ **已完成**
+2. ~~GameData.swift有重复内容需清理~~ **已完成**
+3. ~~界面组件耦合度高~~ **已改善**
+4. 创建了模块化的Views文件夹结构
+5. 提取了可复用的Components组件

@@ -1,0 +1,14 @@
+{
+    "project_name": "CatBreeder",
+    "version": "1.0.0",
+    "platform": "iOS",
+    "minimum_ios_version": "15.0",
+    "target_audience": "13+",
+    "development_stage": "初始化",
+    "key_features": [
+      "猫咪合成系统",
+      "品种收集",
+      "可爱动画",
+      "分享功能"
+    ]
+  }
