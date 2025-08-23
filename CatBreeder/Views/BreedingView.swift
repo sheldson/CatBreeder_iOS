@@ -11,6 +11,7 @@ import SwiftUI
 struct BreedingView: View {
     @EnvironmentObject var gameData: GameData
     @State private var showingResult = false
+    @State private var showingStepByStep = false
     @State private var newCat: Cat?
     @State private var isGenerating = false
     
@@ -39,7 +40,16 @@ struct BreedingView: View {
                             .foregroundColor(.secondary)
                     }
                     
-                    // 合成按钮
+                    // 分步骤合成按钮
+                    Button("分步骤合成") {
+                        showingStepByStep = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+                    .disabled(!canGenerate)
+                    
+                    // 快速合成按钮
                     Button(action: generateCat) {
                         HStack {
                             if isGenerating {
@@ -51,7 +61,7 @@ struct BreedingView: View {
                                     .font(.title2)
                             }
                             
-                            Text(isGenerating ? "合成中..." : "开始合成")
+                            Text(isGenerating ? "快速合成中..." : "快速合成")
                                 .font(.title3)
                                 .fontWeight(.semibold)
                         }
@@ -60,7 +70,7 @@ struct BreedingView: View {
                         .frame(height: 56)
                         .background(
                             RoundedRectangle(cornerRadius: 16)
-                                .fill(canGenerate ? .pink : .gray)
+                                .fill(canGenerate ? .pink.opacity(0.8) : .gray)
                         )
                     }
                     .disabled(!canGenerate || isGenerating)
@@ -95,6 +105,10 @@ struct BreedingView: View {
                     CatResultView(cat: cat)
                         .environmentObject(gameData)
                 }
+            }
+            .fullScreenCover(isPresented: $showingStepByStep) {
+                StepByStepBreedingView()
+                    .environmentObject(gameData)
             }
         }
     }
