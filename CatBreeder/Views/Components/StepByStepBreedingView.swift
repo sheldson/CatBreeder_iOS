@@ -7,6 +7,62 @@
 
 import SwiftUI
 
+// MARK: - 染色方法枚举
+enum DyeingMethod: CaseIterable {
+    case solid        // 单色（均匀染色）
+    case tipped18     // 毛尖色（1/8）
+    case shaded14     // 阴影色（1/4）
+    case smoke12      // 烟色（1/2）
+    case tabby        // 斑纹色（条纹挑染）
+    
+    var name: String {
+        switch self {
+        case .solid: return "单色"
+        case .tipped18: return "毛尖色"
+        case .shaded14: return "阴影色" 
+        case .smoke12: return "烟色"
+        case .tabby: return "斑纹色"
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .solid: return "均匀染色，整根毛发同色"
+        case .tipped18: return "只染毛尖的1/8，优雅渐层"
+        case .shaded14: return "只染毛尖的1/4，柔和过渡"
+        case .smoke12: return "只染毛尖的1/2，烟雾效果"
+        case .tabby: return "条纹挑染，斑纹效果"
+        }
+    }
+    
+    var sliderValue: Double {
+        switch self {
+        case .solid: return 0.0
+        case .tipped18: return 0.25
+        case .shaded14: return 0.5
+        case .smoke12: return 0.75
+        case .tabby: return 1.0
+        }
+    }
+    
+    static func fromSliderValue(_ value: Double) -> DyeingMethod {
+        switch value {
+        case 0.0..<0.125: return .solid
+        case 0.125..<0.375: return .tipped18
+        case 0.375..<0.625: return .shaded14
+        case 0.625..<0.875: return .smoke12
+        default: return .tabby
+        }
+    }
+    
+    // 吸附到最近的有效档位
+    static func snapToNearestValue(_ value: Double) -> Double {
+        let allValues = DyeingMethod.allCases.map { $0.sliderValue }
+        let nearest = allValues.min { abs($0 - value) < abs($1 - value) }
+        return nearest ?? 0.0
+    }
+}
+
 // MARK: - 颜色插值工具
 struct ColorInterpolator {
     // 在原色和稀释色之间进行线性插值
@@ -222,6 +278,7 @@ class BreedingState: ObservableObject {
     @Published var isXXY: Bool = false
     @Published var chromosomes: [BaseColor] = []
     @Published var dilutionLevel: Double = 0.0
+    @Published var dyeingMethodLevel: Double = 0.0  // 染色方法滑块值（0.0-1.0）
     @Published var selectedPattern: Pattern?
     @Published var patternCoverage: Double = 0.5
     @Published var whitePercentage: Double = 0.0
@@ -848,7 +905,7 @@ struct Step2PlaceholderView: View {
                     
                     Slider(value: $state.dilutionLevel, in: 0...1)
                         .onChange(of: state.dilutionLevel) { oldValue, newValue in
-                            print("🎚️ 滑块调节到: \(newValue)")
+                            print("🎚️ 稀释程度调节到: \(newValue)")
                         }
                     .accentColor(.pink)
                     
@@ -859,16 +916,56 @@ struct Step2PlaceholderView: View {
             }
             .padding(.horizontal)
             
+            // 染色方法控制
+            VStack(spacing: 12) {
+                let currentMethod = DyeingMethod.fromSliderValue(state.dyeingMethodLevel)
+                
+                Text("染色方法：\(currentMethod.name)")
+                    .font(.headline)
+                
+                HStack {
+                    Text("单色")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Slider(value: $state.dyeingMethodLevel, in: 0...1)
+                        .onChange(of: state.dyeingMethodLevel) { oldValue, newValue in
+                            // 吸附到最近的有效档位
+                            let snappedValue = DyeingMethod.snapToNearestValue(newValue)
+                            if abs(snappedValue - newValue) > 0.01 {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    state.dyeingMethodLevel = snappedValue
+                                }
+                            }
+                            let method = DyeingMethod.fromSliderValue(snappedValue)
+                            print("🎨 染色方法调节到: \(method.name) (\(snappedValue))")
+                        }
+                        .accentColor(.orange)
+                    
+                    Text("斑纹")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                // 染色方法描述
+                Text(currentMethod.description)
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+            .padding(.horizontal)
+            
             // 快速选项
             HStack(spacing: 16) {
-                Button("使用随机值") {
+                Button("随机稀释") {
                     let newValue = Double.random(in: 0...1)
-                    print("🎲 随机值设置: \(newValue)")
+                    print("🎲 随机稀释设置: \(newValue)")
                     state.dilutionLevel = newValue
                 }
                 .buttonStyle(.bordered)
                 
-                Button("跳过稀释(浓郁)") {
+                Button("跳过稀释") {
                     print("⚪ 跳过稀释，设置为0.0")
                     state.dilutionLevel = 0.0
                 }
