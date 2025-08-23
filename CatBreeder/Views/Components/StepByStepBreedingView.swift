@@ -6,6 +6,40 @@
 //
 
 import SwiftUI
+import Foundation
+
+// MARK: - 虎斑细分类型枚举
+enum TabbySubtype: String, CaseIterable {
+    case mackerel = "鲭鱼斑"     // 细密平行条纹
+    case classic = "古典斑"      // 宽螺旋条纹  
+    case spotted = "点斑"        // 点状斑纹
+    case ticked = "细斑纹"       // 每根毛发有色带
+    case none = "无斑纹"         // 纯色
+    
+    var description: String {
+        switch self {
+        case .mackerel: return "细密平行条纹"
+        case .classic: return "宽螺旋条纹"
+        case .spotted: return "点状斑纹"
+        case .ticked: return "毛发色带"
+        case .none: return "纯色无纹"
+        }
+    }
+    
+    var emoji: String {
+        switch self {
+        case .mackerel: return "🐟"
+        case .classic: return "🐅"
+        case .spotted: return "🐆"
+        case .ticked: return "🎋"
+        case .none: return "⚪"
+        }
+    }
+    
+    static func random() -> TabbySubtype {
+        return TabbySubtype.allCases.randomElement() ?? .none
+    }
+}
 
 // MARK: - 染色方法枚举
 enum DyeingMethod: CaseIterable {
@@ -143,12 +177,10 @@ struct StepByStepBreedingView: View {
                 // 步骤指示器
                 StepIndicator(currentStep: currentStep, totalSteps: totalSteps)
                 
-                Spacer()
-                
-                // 当前步骤内容
+                // 当前步骤内容（使用更紧凑的布局）
                 currentStepView
                 
-                Spacer()
+                Spacer(minLength: 8)
                 
                 // 底部按钮区域
                 if currentStep == 1 {
@@ -166,7 +198,8 @@ struct StepByStepBreedingView: View {
                     )
                 }
             }
-            .padding()
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
             .navigationTitle("猫咪合成")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -196,7 +229,7 @@ struct StepByStepBreedingView: View {
         case 2:
             Step2PlaceholderView(state: breedingState)
         case 3:
-            Step3PlaceholderView(state: $breedingState)
+            Step3PlaceholderView(state: breedingState)
         case 4:
             Step4PlaceholderView(state: $breedingState)
         case 5:
@@ -211,7 +244,13 @@ struct StepByStepBreedingView: View {
         switch currentStep {
         case 1: return breedingState.selectedSex != nil && !breedingState.chromosomes.isEmpty
         case 2: return true // 稀释基因可选
-        case 3: return true // 斑纹可选
+        case 3: 
+            // 橘猫必须选择斑纹，其他猫咪可选
+            if breedingState.isOrangeCat() {
+                return breedingState.selectedTabbySubtype != nil && breedingState.selectedTabbySubtype != .none
+            } else {
+                return breedingState.selectedTabbySubtype != nil
+            }
         case 4: return true // 加白可选
         case 5: return true // 特殊调色自动
         default: return false
@@ -280,10 +319,25 @@ class BreedingState: ObservableObject {
     @Published var dilutionLevel: Double = 0.0
     @Published var dyeingMethodLevel: Double = 0.0  // 染色方法滑块值（0.0-1.0）
     @Published var selectedPattern: Pattern?
-    @Published var patternCoverage: Double = 0.5
+    @Published var selectedTabbySubtype: TabbySubtype?
+    @Published var patternCoverage: Double = 0.5  // 斑纹覆盖度 0-100%
     @Published var whitePercentage: Double = 0.0
     @Published var specialEffects: [GeneticModifier] = []
     @Published var finalCat: Cat?
+    
+    // 检测是否为橘猫（需要强制选择斑纹）
+    func isOrangeCat() -> Bool {
+        guard let sex = selectedSex else { return false }
+        
+        switch sex {
+        case .male:
+            // 公猫：只要有橘色染色体就是橘猫
+            return chromosomes.contains(.red)
+        case .female:
+            // 母猫：两条染色体都是橘色才是橘猫
+            return chromosomes.filter { $0 == .red }.count == 2
+        }
+    }
     
     func fillRemainingStepsRandomly() {
         if selectedSex == nil {
@@ -294,6 +348,14 @@ class BreedingState: ObservableObject {
         }
         if selectedPattern == nil {
             selectedPattern = Pattern.random()
+        }
+        if selectedTabbySubtype == nil {
+            // 橘猫不能选择"无斑纹"
+            if isOrangeCat() {
+                selectedTabbySubtype = TabbySubtype.allCases.filter { $0 != .none }.randomElement()
+            } else {
+                selectedTabbySubtype = TabbySubtype.random()
+            }
         }
         // 其他属性使用默认值或随机值
     }
@@ -903,7 +965,10 @@ struct Step2PlaceholderView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    Slider(value: $state.dilutionLevel, in: 0...1)
+                    Slider(value: Binding(
+                        get: { state.dilutionLevel },
+                        set: { state.dilutionLevel = $0 }
+                    ), in: 0...1)
                         .onChange(of: state.dilutionLevel) { oldValue, newValue in
                             print("🎚️ 稀释程度调节到: \(newValue)")
                         }
@@ -928,7 +993,10 @@ struct Step2PlaceholderView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    Slider(value: $state.dyeingMethodLevel, in: 0...1)
+                    Slider(value: Binding(
+                        get: { state.dyeingMethodLevel },
+                        set: { state.dyeingMethodLevel = $0 }
+                    ), in: 0...1)
                         .onChange(of: state.dyeingMethodLevel) { oldValue, newValue in
                             // 吸附到最近的有效档位
                             let snappedValue = DyeingMethod.snapToNearestValue(newValue)
@@ -989,6 +1057,15 @@ struct Step2PlaceholderView: View {
 struct ChromosomeColorView: View {
     let chromosome: BaseColor
     let dilutionLevel: Double
+    let tabbySubtype: TabbySubtype?
+    let patternCoverage: Double
+    
+    init(chromosome: BaseColor, dilutionLevel: Double, tabbySubtype: TabbySubtype? = nil, patternCoverage: Double = 0.5) {
+        self.chromosome = chromosome
+        self.dilutionLevel = dilutionLevel
+        self.tabbySubtype = tabbySubtype
+        self.patternCoverage = patternCoverage
+    }
     
     var body: some View {
         let interpolatedColor = ColorInterpolator.interpolateColor(
@@ -996,33 +1073,314 @@ struct ChromosomeColorView: View {
             dilutionLevel: dilutionLevel
         )
         
-        RoundedRectangle(cornerRadius: 8)
+        RoundedRectangle(cornerRadius: 6)
             .fill(Color(hex: interpolatedColor))
-            .frame(width: 80, height: 60)
+            .frame(width: 60, height: 45)
             .overlay(
-                Text(ColorInterpolator.getColorName(
-                    baseColor: chromosome, 
-                    dilutionLevel: dilutionLevel
-                ))
-                    .font(.caption)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
+                // 斑纹叠加层
+                patternOverlay
+            )
+            .overlay(
+                // 文字标签
+                VStack(spacing: 2) {
+                    Text(ColorInterpolator.getColorName(
+                        baseColor: chromosome, 
+                        dilutionLevel: dilutionLevel
+                    ))
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .shadow(radius: 1)
+                    
+                    if let tabbyType = tabbySubtype, tabbyType != .none {
+                        Text(tabbyType.rawValue)
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.9))
+                            .shadow(radius: 1)
+                    }
+                }
             )
             .animation(.easeInOut(duration: 0.2), value: dilutionLevel)
-            .id("\(chromosome.rawValue)-\(dilutionLevel)") // 强制刷新
+            .animation(.easeInOut(duration: 0.2), value: patternCoverage)
+            .id("\(chromosome.rawValue)-\(dilutionLevel)-\(tabbySubtype?.rawValue ?? "none")-\(patternCoverage)") // 强制刷新
+    }
+    
+    @ViewBuilder
+    private var patternOverlay: some View {
+        if let tabbyType = tabbySubtype, tabbyType != .none {
+            patternFill(for: tabbyType)
+                .opacity(patternCoverage * 0.6) // 根据覆盖度调整透明度
+        }
+    }
+    
+    private func patternFill(for tabbyType: TabbySubtype) -> some View {
+        RoundedRectangle(cornerRadius: 6)
+            .fill(getPatternGradient(for: tabbyType))
+    }
+    
+    private func getPatternGradient(for tabbyType: TabbySubtype) -> some ShapeStyle {
+        switch tabbyType {
+        case .mackerel:
+            // 鲭鱼斑：垂直线条效果
+            return AnyShapeStyle(
+                LinearGradient(
+                    gradient: Gradient(stops: [
+                        .init(color: .black.opacity(0.4), location: 0.0),
+                        .init(color: .clear, location: 0.1),
+                        .init(color: .black.opacity(0.4), location: 0.2),
+                        .init(color: .clear, location: 0.3),
+                        .init(color: .black.opacity(0.4), location: 0.4),
+                        .init(color: .clear, location: 0.5)
+                    ]),
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+        case .classic:
+            // 古典斑：宽条纹
+            return AnyShapeStyle(
+                LinearGradient(
+                    gradient: Gradient(stops: [
+                        .init(color: .black.opacity(0.4), location: 0.0),
+                        .init(color: .clear, location: 0.3),
+                        .init(color: .black.opacity(0.4), location: 0.7),
+                        .init(color: .clear, location: 1.0)
+                    ]),
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+        case .spotted:
+            // 点斑：径向渐变模拟点状
+            return AnyShapeStyle(
+                RadialGradient(
+                    gradient: Gradient(colors: [.black.opacity(0.4), .clear]),
+                    center: .center,
+                    startRadius: 5,
+                    endRadius: 20
+                )
+            )
+        case .ticked:
+            // 细斑纹：细腻渐变
+            return AnyShapeStyle(
+                LinearGradient(
+                    gradient: Gradient(colors: [.clear, .black.opacity(0.2), .clear]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+        case .none:
+            return AnyShapeStyle(.clear)
+        }
     }
 }
 
 struct Step3PlaceholderView: View {
-    @Binding var state: BreedingState
+    @ObservedObject var state: BreedingState
     
     var body: some View {
-        VStack {
+        VStack(spacing: 8) {
             Text("步骤 3：斑纹选择")
-                .font(.title2)
-            Text("(占位 - 待实现)")
+                .font(.title3)
+                .fontWeight(.bold)
+            
+            Text("选择斑纹类型和覆盖程度")
+                .font(.caption)
                 .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            // 当前状态展示
+            if !state.chromosomes.isEmpty {
+                VStack(spacing: 8) {
+                    Text("当前染色体：")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    HStack(spacing: 12) {
+                        ForEach(Array(state.chromosomes.enumerated()), id: \.offset) { index, chromosome in
+                            VStack(spacing: 4) {
+                                Text("第\(index + 1)条")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                
+                                // 展示叠加了稀释、染色和斑纹效果的颜色
+                                ChromosomeColorView(
+                                    chromosome: chromosome, 
+                                    dilutionLevel: state.dilutionLevel,
+                                    tabbySubtype: state.selectedTabbySubtype,
+                                    patternCoverage: state.patternCoverage
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 橘猫检测提示
+            if state.isOrangeCat() {
+                HStack {
+                    Text("🍊")
+                    Text("橘猫必须选择斑纹")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(.orange.opacity(0.1))
+                )
+            }
+            
+            // 斑纹类型选择
+            VStack(spacing: 8) {
+                Text("斑纹类型")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 8) {
+                    ForEach(TabbySubtype.allCases, id: \.self) { subtype in
+                        TabbyTypeCard(
+                            subtype: subtype,
+                            isSelected: state.selectedTabbySubtype == subtype,
+                            isDisabled: state.isOrangeCat() && subtype == .none
+                        ) {
+                            if !(state.isOrangeCat() && subtype == .none) {
+                                state.selectedTabbySubtype = subtype
+                                print("🎨 选择斑纹类型: \(subtype.rawValue)")
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 斑纹覆盖度控制（仅在选择斑纹时显示）
+            if let selectedType = state.selectedTabbySubtype, selectedType != .none {
+                VStack(spacing: 6) {
+                    Text("覆盖度：\(Int(state.patternCoverage * 100))%")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    HStack {
+                        Text("稀疏")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Slider(value: Binding(
+                            get: { state.patternCoverage },
+                            set: { state.patternCoverage = $0 }
+                        ), in: 0...1)
+                            .onChange(of: state.patternCoverage) { oldValue, newValue in
+                                print("🎚️ 斑纹覆盖度调节到: \(newValue)")
+                            }
+                            .accentColor(.brown)
+                        
+                        Text("密集")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Text("影响斑纹密度")
+                        .font(.caption2)
+                        .foregroundColor(.brown)
+                }
+                .padding(.horizontal)
+            }
+            
+            // 快速选项
+            HStack(spacing: 16) {
+                Button("随机斑纹") {
+                    if state.isOrangeCat() {
+                        state.selectedTabbySubtype = TabbySubtype.allCases.filter { $0 != .none }.randomElement()
+                    } else {
+                        state.selectedTabbySubtype = TabbySubtype.random()
+                    }
+                    state.patternCoverage = Double.random(in: 0.3...0.8)
+                    print("🎲 随机斑纹设置: \(state.selectedTabbySubtype?.rawValue ?? "无")")
+                }
+                .buttonStyle(.bordered)
+                
+                if !state.isOrangeCat() {
+                    Button("跳过斑纹") {
+                        state.selectedTabbySubtype = .none
+                        state.patternCoverage = 0.0
+                        print("⚪ 跳过斑纹，设置为无斑纹")
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
         }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+        .onAppear {
+            // 橘猫自动选择第一个斑纹类型（如果还没选择）
+            if state.isOrangeCat() && state.selectedTabbySubtype == nil {
+                state.selectedTabbySubtype = TabbySubtype.allCases.first { $0 != .none }
+            }
+        }
+    }
+}
+
+// MARK: - 斑纹类型选择卡片
+struct TabbyTypeCard: View {
+    let subtype: TabbySubtype
+    let isSelected: Bool
+    let isDisabled: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Text(subtype.emoji)
+                    .font(.system(size: 24))
+                
+                Text(subtype.rawValue)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                
+                Text(subtype.description)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
+            }
+            .frame(height: 70)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(backgroundColor)
+                    .stroke(borderColor, lineWidth: borderWidth)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.4 : 1.0)
+    }
+    
+    private var backgroundColor: Color {
+        if isDisabled {
+            return .gray.opacity(0.1)
+        } else if isSelected {
+            return .brown.opacity(0.2)
+        } else {
+            return .gray.opacity(0.05)
+        }
+    }
+    
+    private var borderColor: Color {
+        if isDisabled {
+            return .gray.opacity(0.3)
+        } else if isSelected {
+            return .brown
+        } else {
+            return .clear
+        }
+    }
+    
+    private var borderWidth: CGFloat {
+        return isSelected ? 2 : 0
     }
 }
 
