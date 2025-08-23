@@ -7,6 +7,69 @@
 
 import SwiftUI
 
+// MARK: - 颜色插值工具
+struct ColorInterpolator {
+    // 在原色和稀释色之间进行线性插值
+    static func interpolateColor(baseColor: BaseColor, dilutionLevel: Double) -> String {
+        let clampedLevel = max(0.0, min(1.0, dilutionLevel))
+        
+        let originalHex = baseColor.hexColor
+        let dilutedHex = Dilution.dilute.apply(to: baseColor)
+        
+        return interpolateHexColors(from: originalHex, to: dilutedHex, ratio: clampedLevel)
+    }
+    
+    // 十六进制颜色插值
+    private static func interpolateHexColors(from: String, to: String, ratio: Double) -> String {
+        let fromRGB = hexToRGB(from)
+        let toRGB = hexToRGB(to)
+        
+        let r = Int(Double(fromRGB.r) + (Double(toRGB.r - fromRGB.r) * ratio))
+        let g = Int(Double(fromRGB.g) + (Double(toRGB.g - fromRGB.g) * ratio))
+        let b = Int(Double(fromRGB.b) + (Double(toRGB.b - fromRGB.b) * ratio))
+        
+        return String(format: "#%02X%02X%02X", r, g, b)
+    }
+    
+    // 十六进制转RGB
+    private static func hexToRGB(_ hex: String) -> (r: Int, g: Int, b: Int) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        
+        let r = Int((int >> 16) & 0xFF)
+        let g = Int((int >> 8) & 0xFF)
+        let b = Int(int & 0xFF)
+        
+        return (r, g, b)
+    }
+    
+    // 获取稀释程度描述
+    static func getDilutionDescription(dilutionLevel: Double) -> String {
+        switch dilutionLevel {
+        case 0.0..<0.1: return "原色浓郁"
+        case 0.1..<0.3: return "轻微稀释"
+        case 0.3..<0.7: return "中度稀释"
+        case 0.7..<0.9: return "高度稀释"
+        default: return "完全稀释"
+        }
+    }
+    
+    // 获取颜色名称
+    static func getColorName(baseColor: BaseColor, dilutionLevel: Double) -> String {
+        if dilutionLevel < 0.1 {
+            return baseColor.rawValue
+        } else {
+            switch baseColor {
+            case .black: return "蓝灰"
+            case .chocolate: return "淡紫"
+            case .cinnamon: return "米色"
+            case .red: return "奶油"
+            }
+        }
+    }
+}
+
 // MARK: - 分步骤合成界面
 struct StepByStepBreedingView: View {
     @EnvironmentObject var gameData: GameData
@@ -75,7 +138,7 @@ struct StepByStepBreedingView: View {
                 nextStep() // 完成步骤1后进入步骤2
             }
         case 2:
-            Step2PlaceholderView(state: $breedingState)
+            Step2PlaceholderView(state: breedingState)
         case 3:
             Step3PlaceholderView(state: $breedingState)
         case 4:
@@ -736,15 +799,120 @@ struct SexSelectionButton: View {
 
 // 其他步骤的占位视图
 struct Step2PlaceholderView: View {
-    @Binding var state: BreedingState
+    @ObservedObject var state: BreedingState
     
     var body: some View {
-        VStack {
+        VStack(spacing: 20) {
             Text("步骤 2：稀释基因调节")
                 .font(.title2)
-            Text("(占位 - 待实现)")
+                .fontWeight(.bold)
+            
+            Text("稀释基因会让颜色变淡，创造更多颜色变化")
+                .font(.subheadline)
                 .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            // 当前染色体展示
+            if !state.chromosomes.isEmpty {
+                VStack(spacing: 16) {
+                    Text("当前染色体：")
+                        .font(.headline)
+                    
+                    HStack(spacing: 16) {
+                        ForEach(Array(state.chromosomes.enumerated()), id: \.offset) { index, chromosome in
+                            VStack(spacing: 8) {
+                                Text("第\(index + 1)条")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                
+                                // 实时颜色展示（根据稀释程度连续更新）
+                                ChromosomeColorView(
+                                    chromosome: chromosome, 
+                                    dilutionLevel: state.dilutionLevel
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 稀释程度控制
+            VStack(spacing: 12) {
+                Text("稀释程度：\(Int(state.dilutionLevel * 100))%")
+                    .font(.headline)
+                
+                HStack {
+                    Text("浓郁")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Slider(value: $state.dilutionLevel, in: 0...1)
+                        .onChange(of: state.dilutionLevel) { oldValue, newValue in
+                            print("🎚️ 滑块调节到: \(newValue)")
+                        }
+                    .accentColor(.pink)
+                    
+                    Text("淡化")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.horizontal)
+            
+            // 快速选项
+            HStack(spacing: 16) {
+                Button("使用随机值") {
+                    let newValue = Double.random(in: 0...1)
+                    print("🎲 随机值设置: \(newValue)")
+                    state.dilutionLevel = newValue
+                }
+                .buttonStyle(.bordered)
+                
+                Button("跳过稀释(浓郁)") {
+                    print("⚪ 跳过稀释，设置为0.0")
+                    state.dilutionLevel = 0.0
+                }
+                .buttonStyle(.bordered)
+            }
+            
+            // 效果说明
+            if !state.chromosomes.isEmpty {
+                Text("当前效果：\(ColorInterpolator.getDilutionDescription(dilutionLevel: state.dilutionLevel))")
+                    .font(.subheadline)
+                    .foregroundColor(.pink)
+                    .padding(.horizontal)
+                    .multilineTextAlignment(.center)
+            }
         }
+        .padding()
+    }
+}
+
+// MARK: - 染色体颜色显示组件
+struct ChromosomeColorView: View {
+    let chromosome: BaseColor
+    let dilutionLevel: Double
+    
+    var body: some View {
+        let interpolatedColor = ColorInterpolator.interpolateColor(
+            baseColor: chromosome, 
+            dilutionLevel: dilutionLevel
+        )
+        
+        RoundedRectangle(cornerRadius: 8)
+            .fill(Color(hex: interpolatedColor))
+            .frame(width: 80, height: 60)
+            .overlay(
+                Text(ColorInterpolator.getColorName(
+                    baseColor: chromosome, 
+                    dilutionLevel: dilutionLevel
+                ))
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+            )
+            .animation(.easeInOut(duration: 0.2), value: dilutionLevel)
+            .id("\(chromosome.rawValue)-\(dilutionLevel)") // 强制刷新
     }
 }
 
@@ -787,7 +955,86 @@ struct Step5PlaceholderView: View {
     }
 }
 
+// MARK: - 测试验证函数
+extension ColorInterpolator {
+    static func runColorInterpolationTests() {
+        print("🧪 开始颜色插值测试...")
+        
+        // 测试1: 边界值测试
+        testBoundaryValues()
+        
+        // 测试2: 颜色插值连续性测试
+        testColorContinuity()
+        
+        // 测试3: 描述文字测试
+        testDescriptions()
+        
+        print("✅ 所有颜色插值测试完成")
+    }
+    
+    private static func testBoundaryValues() {
+        print("🔍 测试边界值...")
+        
+        let testCases: [(Double, String)] = [
+            (0.0, "应该是原色"),
+            (0.25, "应该是25%插值"),
+            (0.5, "应该是50%插值"),
+            (0.75, "应该是75%插值"),
+            (1.0, "应该是完全稀释"),
+            (-0.1, "应该被限制为0.0"),
+            (1.5, "应该被限制为1.0")
+        ]
+        
+        for (level, expectation) in testCases {
+            let blackResult = interpolateColor(baseColor: .black, dilutionLevel: level)
+            let redResult = interpolateColor(baseColor: .red, dilutionLevel: level)
+            print("  稀释度\(level): 黑色→\(blackResult), 橙色→\(redResult) (\(expectation))")
+        }
+    }
+    
+    private static func testColorContinuity() {
+        print("🔍 测试颜色连续性...")
+        
+        for i in 0...10 {
+            let level = Double(i) / 10.0
+            let result = interpolateColor(baseColor: .black, dilutionLevel: level)
+            let description = getDilutionDescription(dilutionLevel: level)
+            print("  \(Int(level*100))%: \(result) - \(description)")
+        }
+    }
+    
+    private static func testDescriptions() {
+        print("🔍 测试描述文字...")
+        
+        let levels = [0.0, 0.2, 0.5, 0.8, 1.0]
+        for level in levels {
+            let desc = getDilutionDescription(dilutionLevel: level)
+            let blackName = getColorName(baseColor: .black, dilutionLevel: level)
+            let redName = getColorName(baseColor: .red, dilutionLevel: level)
+            print("  \(Int(level*100))%: \(desc) | 黑→\(blackName), 红→\(redName)")
+        }
+    }
+}
+
+// MARK: - 步骤2交互测试验证
+extension Step2PlaceholderView {
+    func testInteractiveFeatures() {
+        print("🧪 开始步骤2交互测试...")
+        print("📱 请手动验证以下功能：")
+        print("  1. 滑动滑块0→100%，色块应连续变化")
+        print("  2. 点击'使用随机值'，色块应立即更新") 
+        print("  3. 点击'跳过稀释'，色块应回到原色")
+        print("  4. 稀释百分比文字应与滑块位置同步")
+        print("  5. 效果描述文字应实时更新")
+        print("  6. 多条染色体应同时响应变化")
+    }
+}
+
 #Preview {
     StepByStepBreedingView()
         .environmentObject(GameData())
+        .onAppear {
+            // 运行测试验证
+            ColorInterpolator.runColorInterpolationTests()
+        }
 }
