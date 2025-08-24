@@ -306,6 +306,7 @@ struct StepByStepBreedingView: View {
                         currentStep: currentStep,
                         totalSteps: totalSteps,
                         canProceed: canProceedToNextStep,
+                        isCompleted: breedingState.isCompleted,
                         onPrevious: previousStep,
                         onNext: nextStep,
                         onSkip: skipToResult,
@@ -326,7 +327,7 @@ struct StepByStepBreedingView: View {
             }
             .sheet(isPresented: $showingResult) {
                 if let cat = breedingState.finalCat {
-                    CatResultView(cat: cat)
+                    CatResultView(cat: cat, breedingSummary: breedingState.breedingSummary)
                         .environmentObject(gameData)
                 }
             }
@@ -426,6 +427,12 @@ struct StepByStepBreedingView: View {
     }
     
     private func finishBreeding() {
+        // 标记合成已完成（不可逆）
+        breedingState.isCompleted = true
+        
+        // 生成详细的合成汇总信息
+        breedingState.breedingSummary = BreedingSummary.create(from: breedingState)
+        
         // 根据breedingState生成最终猫咪
         let genetics = breedingState.generateFinalGenetics()
         let cat = Cat(genetics: genetics)
@@ -435,7 +442,367 @@ struct StepByStepBreedingView: View {
         gameData.addCat(cat)
         _ = gameData.spendCoins(50)
         
+        print("🎉 合成完成！已生成详细汇总信息，流程变为不可逆")
         showingResult = true
+    }
+}
+
+// MARK: - 猫咪品种枚举
+enum CatBreed: String, CaseIterable {
+    case britishShorthair = "英国短毛猫"
+    case americanShorthair = "美国短毛猫"
+    case persianCat = "波斯猫"
+    case siameseCat = "暹罗猫"
+    case maineCoon = "缅因猫"
+    case ragdoll = "布偶猫"
+    case russianBlue = "俄罗斯蓝猫"
+    case norwegianForest = "挪威森林猫"
+    case scottishFold = "苏格兰折耳猫"
+    case abyssinian = "阿比西尼亚猫"
+    case mixedBreed = "混血猫"
+    
+    var description: String {
+        switch self {
+        case .britishShorthair: return "圆脸短毛，温和性格"
+        case .americanShorthair: return "活泼健康，适应力强"
+        case .persianCat: return "长毛优雅，温柔安静"
+        case .siameseCat: return "重点色系，聪明活跃"
+        case .maineCoon: return "大型长毛，友善温顺"
+        case .ragdoll: return "蓝眼长毛，性格温和"
+        case .russianBlue: return "蓝灰短毛，安静优雅"
+        case .norwegianForest: return "厚毛御寒，独立坚强"
+        case .scottishFold: return "折耳圆脸，性格甜美"
+        case .abyssinian: return "野性外观，活泼好奇"
+        case .mixedBreed: return "血统混合，特征多样"
+        }
+    }
+    
+    var emoji: String {
+        switch self {
+        case .britishShorthair: return "🇬🇧"
+        case .americanShorthair: return "🇺🇸"
+        case .persianCat: return "🇮🇷"
+        case .siameseCat: return "🇹🇭"
+        case .maineCoon: return "🦁"
+        case .ragdoll: return "🧸"
+        case .russianBlue: return "🇷🇺"
+        case .norwegianForest: return "🇳🇴"
+        case .scottishFold: return "🏴󠁧󠁢󠁳󠁣󠁴󠁿"
+        case .abyssinian: return "🇪🇹"
+        case .mixedBreed: return "🌍"
+        }
+    }
+    
+    // 根据基因特征推测品种
+    static func predictBreed(
+        sex: Sex?,
+        chromosomes: [BaseColor],
+        dilutionLevel: Double,
+        tabbySubtype: TabbySubtype?,
+        whitePercentage: Double,
+        temperatureEffect: TemperatureEffect?
+    ) -> CatBreed {
+        
+        // 暹罗猫特征：重点色（温度敏感变深）
+        if let effect = temperatureEffect, effect == .darken {
+            return .siameseCat
+        }
+        
+        // 俄罗斯蓝猫：稀释的黑色，无斑纹
+        if chromosomes.contains(.black) && dilutionLevel > 0.7 && tabbySubtype == .none {
+            return .russianBlue
+        }
+        
+        // 布偶猫：高白色比例，蓝眼基因
+        if whitePercentage > 0.6 {
+            return .ragdoll
+        }
+        
+        // 缅因猫：虎斑纹，大体型特征
+        if let tabby = tabbySubtype, tabby == .mackerel || tabby == .classic {
+            return .maineCoon
+        }
+        
+        // 波斯猫：纯色，优雅特征
+        if tabbySubtype == .none && dilutionLevel < 0.3 {
+            return .persianCat
+        }
+        
+        // 阿比西尼亚猫：细斑纹特征
+        if tabbySubtype == .ticked {
+            return .abyssinian
+        }
+        
+        // 美国短毛猫：经典斑纹
+        if tabbySubtype == .classic {
+            return .americanShorthair
+        }
+        
+        // 英国短毛猫：纯色或轻微斑纹
+        if chromosomes.contains(.black) && dilutionLevel < 0.5 {
+            return .britishShorthair
+        }
+        
+        // 挪威森林猫：复杂特征组合
+        if whitePercentage > 0.3 && whitePercentage < 0.6 {
+            return .norwegianForest
+        }
+        
+        // 默认为混血猫
+        return .mixedBreed
+    }
+}
+
+// MARK: - 合成汇总信息
+struct BreedingSummary {
+    let predictedBreed: CatBreed
+    let detailedColorDescription: String
+    let stepByStepChoices: [StepChoice]
+    let rarityExplanation: String
+    let eyeColorResult: EyeColor
+    let specialFeatures: [String]
+    
+    // 每一步的选择记录
+    struct StepChoice {
+        let stepNumber: Int
+        let stepName: String
+        let choice: String
+        let description: String
+    }
+    
+    // 生成详细的颜色描述
+    static func generateDetailedColorDescription(
+        chromosomes: [BaseColor],
+        dilutionLevel: Double,
+        dyeingMethod: DyeingMethod,
+        tabbySubtype: TabbySubtype?,
+        patternCoverage: Double,
+        whitePercentage: Double,
+        whiteAreas: Set<WhiteArea>,
+        temperatureEffect: TemperatureEffect?,
+        affectedParts: Set<BodyPart>,
+        temperatureIntensity: Double
+    ) -> String {
+        var description = ""
+        
+        // 基础颜色
+        if chromosomes.count == 1 {
+            description += "单一\(chromosomes[0].rawValue)基因"
+        } else if chromosomes.count == 2 {
+            let first = chromosomes[0]
+            let second = chromosomes[1]
+            if first == second {
+                description += "双重\(first.rawValue)基因"
+            } else {
+                description += "\(first.rawValue)与\(second.rawValue)混合基因"
+            }
+        }
+        
+        // 稀释效果
+        if dilutionLevel > 0.1 {
+            let dilutionPercent = Int(dilutionLevel * 100)
+            description += "，\(dilutionPercent)%稀释"
+            description += "（\(ColorInterpolator.getDilutionDescription(dilutionLevel: dilutionLevel))）"
+        }
+        
+        // 染色方法
+        description += "，采用\(dyeingMethod.name)工艺"
+        
+        // 斑纹信息
+        if let tabby = tabbySubtype, tabby != .none {
+            let coveragePercent = Int(patternCoverage * 100)
+            description += "，\(tabby.rawValue)纹理（\(coveragePercent)%覆盖度）"
+        } else {
+            description += "，无斑纹纯色"
+        }
+        
+        // 白色分布
+        if whitePercentage > 0.05 {
+            let whitePercent = Int(whitePercentage * 100)
+            description += "，\(whitePercent)%白色分布"
+            if !whiteAreas.isEmpty {
+                let areaNames = whiteAreas.map { $0.rawValue }.joined(separator: "、")
+                description += "（集中于\(areaNames)）"
+            }
+        }
+        
+        // 温度敏感效果
+        if let effect = temperatureEffect, !affectedParts.isEmpty {
+            let intensityPercent = Int(temperatureIntensity * 100)
+            let partNames = affectedParts.map { $0.rawValue }.joined(separator: "、")
+            description += "，\(effect.rawValue)（\(partNames)，\(intensityPercent)%强度）"
+        }
+        
+        return description
+    }
+    
+    // 创建完整的合成汇总
+    static func create(from state: BreedingState) -> BreedingSummary {
+        // 预测品种
+        let predictedBreed = CatBreed.predictBreed(
+            sex: state.selectedSex,
+            chromosomes: state.chromosomes,
+            dilutionLevel: state.dilutionLevel,
+            tabbySubtype: state.selectedTabbySubtype,
+            whitePercentage: state.whitePercentage,
+            temperatureEffect: state.selectedTemperatureEffect
+        )
+        
+        // 生成详细颜色描述
+        let detailedColorDescription = generateDetailedColorDescription(
+            chromosomes: state.chromosomes,
+            dilutionLevel: state.dilutionLevel,
+            dyeingMethod: DyeingMethod.fromSliderValue(state.dyeingMethodLevel),
+            tabbySubtype: state.selectedTabbySubtype,
+            patternCoverage: state.patternCoverage,
+            whitePercentage: state.whitePercentage,
+            whiteAreas: state.selectedWhiteAreas,
+            temperatureEffect: state.selectedTemperatureEffect,
+            affectedParts: state.selectedBodyParts,
+            temperatureIntensity: state.temperatureIntensity
+        )
+        
+        // 记录每一步的选择
+        var stepChoices: [StepChoice] = []
+        
+        // 步骤1
+        if let sex = state.selectedSex {
+            let chromosomeDesc = state.chromosomes.map { $0.rawValue }.joined(separator: "+")
+            stepChoices.append(StepChoice(
+                stepNumber: 1,
+                stepName: "性别与染色体",
+                choice: "\(sex.rawValue)\(state.isXXY ? "(XXY)" : "")",
+                description: "抽取到\(chromosomeDesc)染色体"
+            ))
+        }
+        
+        // 步骤2
+        let dyeingMethod = DyeingMethod.fromSliderValue(state.dyeingMethodLevel)
+        stepChoices.append(StepChoice(
+            stepNumber: 2,
+            stepName: "稀释与染色",
+            choice: "\(Int(state.dilutionLevel * 100))%稀释 + \(dyeingMethod.name)",
+            description: "\(ColorInterpolator.getDilutionDescription(dilutionLevel: state.dilutionLevel))，\(dyeingMethod.description)"
+        ))
+        
+        // 步骤3
+        if let tabby = state.selectedTabbySubtype {
+            stepChoices.append(StepChoice(
+                stepNumber: 3,
+                stepName: "斑纹选择",
+                choice: tabby.rawValue,
+                description: "\(tabby.description)，\(Int(state.patternCoverage * 100))%覆盖度"
+            ))
+        }
+        
+        // 步骤4
+        if state.whitePercentage > 0 {
+            let areaNames = state.selectedWhiteAreas.map { $0.rawValue }.joined(separator: "、")
+            stepChoices.append(StepChoice(
+                stepNumber: 4,
+                stepName: "加白设置",
+                choice: "\(Int(state.whitePercentage * 100))%白色",
+                description: areaNames.isEmpty ? "均匀分布" : "主要在\(areaNames)"
+            ))
+        } else {
+            stepChoices.append(StepChoice(
+                stepNumber: 4,
+                stepName: "加白设置",
+                choice: "无白色",
+                description: "保持原色"
+            ))
+        }
+        
+        // 步骤5（如果有）
+        if let effect = state.selectedTemperatureEffect {
+            let partNames = state.selectedBodyParts.map { $0.rawValue }.joined(separator: "、")
+            stepChoices.append(StepChoice(
+                stepNumber: 5,
+                stepName: "温度敏感调色",
+                choice: effect.rawValue,
+                description: "\(partNames)，\(Int(state.temperatureIntensity * 100))%强度"
+            ))
+        }
+        
+        // 随机生成眼睛颜色
+        let eyeColorResult = EyeColor.allCases.randomElement() ?? .copper
+        
+        // 生成稀有度解释
+        let rarityExplanation = generateRarityExplanation(from: state)
+        
+        // 生成特殊特征
+        let specialFeatures = generateSpecialFeatures(from: state)
+        
+        return BreedingSummary(
+            predictedBreed: predictedBreed,
+            detailedColorDescription: detailedColorDescription,
+            stepByStepChoices: stepChoices,
+            rarityExplanation: rarityExplanation,
+            eyeColorResult: eyeColorResult,
+            specialFeatures: specialFeatures
+        )
+    }
+    
+    // 生成稀有度解释
+    private static func generateRarityExplanation(from state: BreedingState) -> String {
+        var factors: [String] = []
+        
+        if state.dilutionLevel > 0.5 {
+            factors.append("稀释基因变异")
+        }
+        
+        if let tabby = state.selectedTabbySubtype, tabby != .none && tabby != .mackerel {
+            factors.append("特殊斑纹类型")
+        }
+        
+        if state.whitePercentage > 0.6 {
+            factors.append("高白色分布")
+        }
+        
+        if state.selectedTemperatureEffect != nil {
+            factors.append("温度敏感基因")
+        }
+        
+        if state.isXXY {
+            factors.append("XXY染色体异常")
+        }
+        
+        if factors.isEmpty {
+            return "标准基因组合，常见特征"
+        } else {
+            return "稀有因素：" + factors.joined(separator: "、")
+        }
+    }
+    
+    // 生成特殊特征
+    private static func generateSpecialFeatures(from state: BreedingState) -> [String] {
+        var features: [String] = []
+        
+        if state.isXXY {
+            features.append("🧬 XXY超稀有染色体")
+        }
+        
+        if state.isOrangeCat() {
+            features.append("🍊 橘猫基因（必带斑纹）")
+        }
+        
+        if state.dilutionLevel > 0.8 {
+            features.append("💧 极度稀释变异")
+        }
+        
+        if state.whitePercentage > 0.8 {
+            features.append("⚪ 近乎全白基因")
+        }
+        
+        if let tabby = state.selectedTabbySubtype, tabby == .ticked {
+            features.append("🎋 野生型斑纹基因")
+        }
+        
+        if state.selectedTemperatureEffect == .darken {
+            features.append("❄️ 重点色温敏基因")
+        }
+        
+        return features
     }
 }
 
@@ -459,6 +826,10 @@ class BreedingState: ObservableObject {
     @Published var selectedTemperatureEffect: TemperatureEffect?
     @Published var selectedBodyParts: Set<BodyPart> = []
     @Published var temperatureIntensity: Double = 0.5  // 温度效应强度 0-1
+    
+    // 合成完成后的详细信息
+    @Published var breedingSummary: BreedingSummary?
+    @Published var isCompleted: Bool = false  // 标记合成是否已完成（不可逆）
     
     // 强制触发UI刷新
     func forceUIRefresh() {
@@ -632,6 +1003,7 @@ struct BottomControls: View {
     let currentStep: Int
     let totalSteps: Int
     let canProceed: Bool
+    let isCompleted: Bool
     let onPrevious: () -> Void
     let onNext: () -> Void
     let onSkip: () -> Void
@@ -641,8 +1013,8 @@ struct BottomControls: View {
         VStack(spacing: 16) {
             // 主要操作按钮
             HStack(spacing: 16) {
-                // 上一步按钮
-                if currentStep > 1 {
+                // 上一步按钮（合成完成后不显示）
+                if currentStep > 1 && !isCompleted {
                     Button("上一步", action: onPrevious)
                         .buttonStyle(.bordered)
                         .frame(maxWidth: .infinity)
@@ -660,17 +1032,24 @@ struct BottomControls: View {
                 .disabled(!canProceed)
                 .frame(maxWidth: .infinity)
                 .onAppear {
-                    print("🎯 [BottomControls] 步骤\(currentStep) - canProceed = \(canProceed)")
+                    print("🎯 [BottomControls] 步骤\(currentStep) - canProceed = \(canProceed), isCompleted = \(isCompleted)")
                 }
                 .onChange(of: canProceed) { oldValue, newValue in
                     print("🎯 [BottomControls] 步骤\(currentStep) - canProceed 变化: \(oldValue) → \(newValue)")
                 }
             }
             
-            // 跳过按钮
-            Button("跳过剩余步骤，直接合成", action: onSkip)
-                .font(.caption)
-                .foregroundColor(.secondary)
+            // 跳过按钮（合成完成后不显示）
+            if !isCompleted {
+                Button("跳过剩余步骤，直接合成", action: onSkip)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("✅ 合成已完成，无法返回修改")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .padding(.top, 8)
+            }
         }
         .padding()
     }
