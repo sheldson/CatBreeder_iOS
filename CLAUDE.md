@@ -19,6 +19,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - UI测试位于: `CatBreederUITests/`
 - 单元测试位于: `CatBreederTests/`
 
+### Git 提交规则 ⚠️
+- **重要：Claude不得自动提交代码**
+- 完成开发后等待用户验收
+- 只有在用户明确下达命令时才进行git commit
+- 用户验收通过后会给出具体提交指令
+
 ## 核心架构
 
 ### 数据模型层 (Models/)

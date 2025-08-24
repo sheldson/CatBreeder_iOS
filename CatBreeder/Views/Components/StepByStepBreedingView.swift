@@ -41,7 +41,61 @@ enum TabbySubtype: String, CaseIterable {
     }
 }
 
-// MARK: - 白斑区域枚举
+// MARK: - 身体白色等级枚举
+enum BodyWhiteLevel: CaseIterable {
+    case none        // 0% - 无白色
+    case paws        // 20% - 足底白袜
+    case legs        // 40% - 腿部白色
+    case belly       // 60% - 腹部白色
+    case chest       // 80% - 胸部白色
+    case full        // 100% - 接近全白
+    
+    var percentage: Double {
+        switch self {
+        case .none: return 0.0
+        case .paws: return 0.2
+        case .legs: return 0.4
+        case .belly: return 0.6
+        case .chest: return 0.8
+        case .full: return 1.0
+        }
+    }
+    
+    var name: String {
+        switch self {
+        case .none: return "无白色"
+        case .paws: return "白袜"
+        case .legs: return "白腿"
+        case .belly: return "白腹"
+        case .chest: return "白胸"
+        case .full: return "近全白"
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .none: return "保持原色"
+        case .paws: return "足底白袜，优雅点缀"
+        case .legs: return "腿部白色，活泼可爱"
+        case .belly: return "腹部白色，温和亲近"
+        case .chest: return "胸部白色，高贵典雅"
+        case .full: return "大面积白色，纯洁美丽"
+        }
+    }
+    
+    static func fromPercentage(_ value: Double) -> BodyWhiteLevel {
+        switch value {
+        case 0.0..<0.1: return .none
+        case 0.1..<0.3: return .paws
+        case 0.3..<0.5: return .legs
+        case 0.5..<0.7: return .belly
+        case 0.7..<0.9: return .chest
+        default: return .full
+        }
+    }
+}
+
+// MARK: - 面部白斑区域枚举
 enum WhiteArea: String, CaseIterable {
     case forehead = "额头"
     case noseBridge = "鼻梁" 
@@ -645,13 +699,19 @@ struct BreedingSummary {
             description += "，无斑纹纯色"
         }
         
-        // 白色分布
-        if whitePercentage > 0.05 {
-            let whitePercent = Int(whitePercentage * 100)
-            description += "，\(whitePercent)%白色分布"
-            if !whiteAreas.isEmpty {
-                let areaNames = whiteAreas.map { $0.rawValue }.joined(separator: "、")
-                description += "（集中于\(areaNames)）"
+        // 身体白色分布
+        let bodyWhiteLevel = BodyWhiteLevel.fromPercentage(whitePercentage)
+        if bodyWhiteLevel != .none {
+            description += "，身体\(bodyWhiteLevel.name)"
+        }
+        
+        // 面部白斑（独立）
+        if !whiteAreas.isEmpty {
+            let areaNames = whiteAreas.map { $0.rawValue }.joined(separator: "、")
+            if bodyWhiteLevel != .none {
+                description += "，面部白斑（\(areaNames)）"
+            } else {
+                description += "，面部白斑分布于\(areaNames)"
             }
         }
         
@@ -673,7 +733,7 @@ struct BreedingSummary {
             chromosomes: state.chromosomes,
             dilutionLevel: state.dilutionLevel,
             tabbySubtype: state.selectedTabbySubtype,
-            whitePercentage: state.whitePercentage,
+            whitePercentage: state.bodyWhiteLevel,
             temperatureEffect: state.selectedTemperatureEffect
         )
         
@@ -684,8 +744,8 @@ struct BreedingSummary {
             dyeingMethod: DyeingMethod.fromSliderValue(state.dyeingMethodLevel),
             tabbySubtype: state.selectedTabbySubtype,
             patternCoverage: state.patternCoverage,
-            whitePercentage: state.whitePercentage,
-            whiteAreas: state.selectedWhiteAreas,
+            whitePercentage: state.bodyWhiteLevel,
+            whiteAreas: state.selectedFaceWhiteAreas,
             temperatureEffect: state.selectedTemperatureEffect,
             affectedParts: state.selectedBodyParts,
             temperatureIntensity: state.temperatureIntensity
@@ -725,22 +785,18 @@ struct BreedingSummary {
         }
         
         // 步骤4
-        if state.whitePercentage > 0 {
-            let areaNames = state.selectedWhiteAreas.map { $0.rawValue }.joined(separator: "、")
-            stepChoices.append(StepChoice(
-                stepNumber: 4,
-                stepName: "加白设置",
-                choice: "\(Int(state.whitePercentage * 100))%白色",
-                description: areaNames.isEmpty ? "均匀分布" : "主要在\(areaNames)"
-            ))
-        } else {
-            stepChoices.append(StepChoice(
-                stepNumber: 4,
-                stepName: "加白设置",
-                choice: "无白色",
-                description: "保持原色"
-            ))
+        let bodyLevel = BodyWhiteLevel.fromPercentage(state.bodyWhiteLevel)
+        let faceAreasDesc = state.selectedFaceWhiteAreas.map { $0.rawValue }.joined(separator: "、")
+        var step4Description = "身体：\(bodyLevel.name)"
+        if !state.selectedFaceWhiteAreas.isEmpty {
+            step4Description += "，面部：\(faceAreasDesc)"
         }
+        stepChoices.append(StepChoice(
+            stepNumber: 4,
+            stepName: "加白设置",
+            choice: bodyLevel == .none && state.selectedFaceWhiteAreas.isEmpty ? "无白色" : "复合白色",
+            description: step4Description
+        ))
         
         // 步骤5（如果有）
         if let effect = state.selectedTemperatureEffect {
@@ -784,8 +840,8 @@ struct BreedingSummary {
             factors.append("特殊斑纹类型")
         }
         
-        if state.whitePercentage > 0.6 {
-            factors.append("高白色分布")
+        if state.bodyWhiteLevel > 0.6 {
+            factors.append("高身体白色分布")
         }
         
         if state.selectedTemperatureEffect != nil {
@@ -819,7 +875,7 @@ struct BreedingSummary {
             features.append("💧 极度稀释变异")
         }
         
-        if state.whitePercentage > 0.8 {
+        if state.bodyWhiteLevel > 0.8 {
             features.append("⚪ 近乎全白基因")
         }
         
@@ -845,8 +901,12 @@ class BreedingState: ObservableObject {
     @Published var selectedPattern: Pattern?
     @Published var selectedTabbySubtype: TabbySubtype?
     @Published var patternCoverage: Double = 0.5  // 斑纹覆盖度 0-100%
-    @Published var whitePercentage: Double = 0.0
-    @Published var selectedWhiteAreas: Set<WhiteArea> = []  // 白斑区域选择
+    
+    // 身体加白系统（从足底往上）
+    @Published var bodyWhiteLevel: Double = 0.0  // 0.0-1.0，控制身体白色程度
+    
+    // 面部加白系统（独立）
+    @Published var selectedFaceWhiteAreas: Set<WhiteArea> = []  // 面部白斑区域选择
     @Published var specialEffects: [GeneticModifier] = []
     @Published var finalCat: Cat?
     @Published var uiRefreshTrigger: Int = 0  // UI刷新触发器
@@ -870,8 +930,8 @@ class BreedingState: ObservableObject {
         selectedPattern = nil
         selectedTabbySubtype = nil
         patternCoverage = 0.5
-        whitePercentage = 0.0
-        selectedWhiteAreas = []
+        bodyWhiteLevel = 0.0
+        selectedFaceWhiteAreas = []
         specialEffects = []
         finalCat = nil
         selectedTemperatureEffect = nil
@@ -945,7 +1005,7 @@ class BreedingState: ObservableObject {
         let pattern = selectedPattern ?? Pattern.random()
         let white = WhitePattern(
             distribution: WhiteDistribution.random(),
-            percentage: whitePercentage * 100
+            percentage: bodyWhiteLevel * 100  // 使用身体白色等级
         )
         
         return GeneticsData(
@@ -2166,7 +2226,7 @@ struct Step4PlaceholderView: View {
                 .font(.title3)
                 .fontWeight(.bold)
             
-            Text("调整白色分布范围和强度")
+            Text("身体加白和面部白斑独立控制")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -2191,8 +2251,8 @@ struct Step4PlaceholderView: View {
                                     dilutionLevel: state.dilutionLevel,
                                     tabbySubtype: state.selectedTabbySubtype,
                                     patternCoverage: state.patternCoverage,
-                                    whitePercentage: state.whitePercentage,
-                                    whiteAreas: state.selectedWhiteAreas
+                                    whitePercentage: state.bodyWhiteLevel,
+                                    whiteAreas: state.selectedFaceWhiteAreas
                                 )
                             }
                         }
@@ -2200,92 +2260,104 @@ struct Step4PlaceholderView: View {
                 }
             }
             
-            // 加白程度滑块
+            // 身体加白程度滑块
             VStack(spacing: 6) {
-                Text("加白程度：\(Int(state.whitePercentage * 100))%")
+                let currentLevel = BodyWhiteLevel.fromPercentage(state.bodyWhiteLevel)
+                
+                Text("身体加白：\(currentLevel.name)")
                     .font(.subheadline)
                     .fontWeight(.medium)
                 
                 HStack {
-                    Text("无白")
+                    Text("足底")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
                     Slider(value: Binding(
-                        get: { state.whitePercentage },
-                        set: { state.whitePercentage = $0 }
+                        get: { state.bodyWhiteLevel },
+                        set: { state.bodyWhiteLevel = $0 }
                     ), in: 0...1)
-                        .onChange(of: state.whitePercentage) { oldValue, newValue in
-                            print("⚪ 加白程度调节到: \(newValue)")
+                        .onChange(of: state.bodyWhiteLevel) { oldValue, newValue in
+                            let level = BodyWhiteLevel.fromPercentage(newValue)
+                            print("⚪ 身体加白调节到: \(level.name)")
                         }
                         .accentColor(.blue)
                     
-                    Text("纯白")
+                    Text("脊柱")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 
-                Text("影响白色覆盖范围")
+                Text(BodyWhiteLevel.fromPercentage(state.bodyWhiteLevel).description)
                     .font(.caption2)
                     .foregroundColor(.blue)
+                    .multilineTextAlignment(.center)
             }
             .padding(.horizontal)
             
-            // 猫脸白斑精选器
+            // 面部白斑选择器
             VStack(spacing: 6) {
-                Text("白斑精选区域")
+                Text("面部白斑（独立）")
                     .font(.subheadline)
                     .fontWeight(.medium)
                 
                 CatFaceSelector(selectedAreas: Binding(
-                    get: { state.selectedWhiteAreas },
-                    set: { state.selectedWhiteAreas = $0 }
+                    get: { state.selectedFaceWhiteAreas },
+                    set: { state.selectedFaceWhiteAreas = $0 }
                 ))
-                .frame(height: 200)
+                .frame(height: 160)
                 
-                Text("点击猫脸区域选择白斑位置")
+                Text("点击面部区域添加白斑")
                     .font(.caption2)
-                    .foregroundColor(.blue)
+                    .foregroundColor(.orange)
                     .multilineTextAlignment(.center)
             }
             
             // 快速选项
             VStack(spacing: 6) {
-                HStack(spacing: 12) {
-                    Button("随机白斑") {
-                        let randomCount = Int.random(in: 1...3)
-                        state.selectedWhiteAreas = Set(WhiteArea.allCases.shuffled().prefix(randomCount))
-                        state.whitePercentage = Double.random(in: 0.2...0.8)
-                        print("🎲 随机白斑设置: \(state.selectedWhiteAreas.count)个区域, \(Int(state.whitePercentage * 100))%强度")
+                HStack(spacing: 8) {
+                    Button("白袜猫") {
+                        state.bodyWhiteLevel = BodyWhiteLevel.paws.percentage
+                        state.selectedFaceWhiteAreas = []
+                        print("🧦 白袜猫设置")
                     }
                     .buttonStyle(.bordered)
-                    .font(.caption)
+                    .font(.caption2)
                     
-                    Button("经典白胸") {
-                        state.selectedWhiteAreas = [.chin, .muzzle]
-                        state.whitePercentage = 0.4
-                        print("🤍 经典白胸设置")
+                    Button("面部白斑") {
+                        state.bodyWhiteLevel = 0.0
+                        state.selectedFaceWhiteAreas = [.chin, .muzzle, .noseBridge]
+                        print("😺 面部白斑设置")
                     }
                     .buttonStyle(.bordered)
-                    .font(.caption)
-                }
-                
-                HStack(spacing: 12) {
+                    .font(.caption2)
+                    
                     Button("双色猫") {
-                        state.selectedWhiteAreas = [.forehead, .chin, .muzzle, .leftCheek, .rightCheek]
-                        state.whitePercentage = 0.6
+                        state.bodyWhiteLevel = BodyWhiteLevel.belly.percentage
+                        state.selectedFaceWhiteAreas = [.forehead, .chin, .leftCheek, .rightCheek]
                         print("🔵 双色猫设置")
                     }
                     .buttonStyle(.bordered)
-                    .font(.caption)
-                    
-                    Button("清除白色") {
-                        state.selectedWhiteAreas.removeAll()
-                        state.whitePercentage = 0.0
-                        print("🚫 清除所有白色设置")
+                    .font(.caption2)
+                }
+                
+                HStack(spacing: 8) {
+                    Button("随机组合") {
+                        state.bodyWhiteLevel = Double.random(in: 0...1)
+                        let randomCount = Int.random(in: 0...3)
+                        state.selectedFaceWhiteAreas = Set(WhiteArea.allCases.shuffled().prefix(randomCount))
+                        print("🎲 随机加白组合")
                     }
                     .buttonStyle(.bordered)
-                    .font(.caption)
+                    .font(.caption2)
+                    
+                    Button("清除所有") {
+                        state.bodyWhiteLevel = 0.0
+                        state.selectedFaceWhiteAreas.removeAll()
+                        print("🚫 清除所有白色")
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption2)
                 }
             }
         }
@@ -2329,8 +2401,8 @@ struct Step5PlaceholderView: View {
                                     dilutionLevel: state.dilutionLevel,
                                     tabbySubtype: state.selectedTabbySubtype,
                                     patternCoverage: state.patternCoverage,
-                                    whitePercentage: state.whitePercentage,
-                                    whiteAreas: state.selectedWhiteAreas,
+                                    whitePercentage: state.bodyWhiteLevel,
+                                    whiteAreas: state.selectedFaceWhiteAreas,
                                     temperatureEffect: state.selectedTemperatureEffect,
                                     affectedParts: state.selectedBodyParts,
                                     intensity: state.temperatureIntensity

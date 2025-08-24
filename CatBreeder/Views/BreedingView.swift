@@ -10,10 +10,7 @@ import SwiftUI
 // MARK: - 合成界面
 struct BreedingView: View {
     @EnvironmentObject var gameData: GameData
-    @State private var showingResult = false
     @State private var showingStepByStep = false
-    @State private var newCat: Cat?
-    @State private var isGenerating = false
     
     var body: some View {
         NavigationView {
@@ -35,45 +32,21 @@ struct BreedingView: View {
                             .font(.title)
                             .fontWeight(.bold)
                         
-                        Text("消耗 50 金币生成一只随机猫咪")
+                        Text("消耗 50 金币，5步交互式合成独特猫咪")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
                     }
                     
-                    // 分步骤合成按钮
-                    Button("分步骤合成") {
+                    // 分步骤合成按钮（主要入口）
+                    Button("开始合成") {
                         showingStepByStep = true
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
+                    .frame(height: 56)
                     .disabled(!canGenerate)
-                    
-                    // 快速合成按钮
-                    Button(action: generateCat) {
-                        HStack {
-                            if isGenerating {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(0.8)
-                            } else {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.title2)
-                            }
-                            
-                            Text(isGenerating ? "快速合成中..." : "快速合成")
-                                .font(.title3)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(canGenerate ? .pink.opacity(0.8) : .gray)
-                        )
-                    }
-                    .disabled(!canGenerate || isGenerating)
                     .animation(.easeInOut(duration: 0.2), value: canGenerate)
                     
                     // 提示信息
@@ -100,12 +73,6 @@ struct BreedingView: View {
             }
             .navigationTitle("合成")
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showingResult) {
-                if let cat = newCat {
-                    CatResultView(cat: cat)
-                        .environmentObject(gameData)
-                }
-            }
             .fullScreenCover(isPresented: $showingStepByStep) {
                 StepByStepBreedingView()
                     .environmentObject(gameData)
@@ -114,24 +81,7 @@ struct BreedingView: View {
     }
     
     private var canGenerate: Bool {
-        return gameData.coins >= 50 && !isGenerating
-    }
-    
-    private func generateCat() {
-        guard canGenerate else { return }
-        
-        isGenerating = true
-        
-        // 模拟合成过程
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            let cat = gameData.generateRandomCat()
-            gameData.addCat(cat)
-            _ = gameData.spendCoins(50)
-            
-            newCat = cat
-            isGenerating = false
-            showingResult = true
-        }
+        return gameData.coins >= 50
     }
 }
 
