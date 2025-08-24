@@ -80,6 +80,75 @@ enum WhiteArea: String, CaseIterable {
     }
 }
 
+// MARK: - 温度敏感调色枚举
+enum TemperatureEffect: String, CaseIterable {
+    case lighten = "局部变浅"  // 高体温区域变浅
+    case darken = "局部变深"   // 低体温区域变深
+    
+    var description: String {
+        switch self {
+        case .lighten: return "高体温区域颜色变浅，减少热量吸收"
+        case .darken: return "低体温区域颜色变深，增加热量吸收"
+        }
+    }
+    
+    var emoji: String {
+        switch self {
+        case .lighten: return "☀️"
+        case .darken: return "❄️" 
+        }
+    }
+    
+    var availableBodyParts: [BodyPart] {
+        switch self {
+        case .lighten:
+            return [.belly, .body]  // 腹部和身体（高体温区域）
+        case .darken:
+            return [.face, .ears, .limbs, .tail]  // 面部、耳朵、四肢、尾巴（低体温区域）
+        }
+    }
+}
+
+enum BodyPart: String, CaseIterable {
+    case face = "面部"
+    case ears = "耳朵"
+    case body = "身体"      // 除了面部、耳朵、四肢、尾巴以外的区域
+    case belly = "腹部"     // 腹部区域
+    case limbs = "四肢"
+    case tail = "尾巴"
+    
+    var emoji: String {
+        switch self {
+        case .face: return "😺"
+        case .ears: return "👂"
+        case .body: return "🫸"
+        case .belly: return "🤱"
+        case .limbs: return "🦵"
+        case .tail: return "↗️"
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .face: return "面部区域"
+        case .ears: return "耳朵区域"
+        case .body: return "身体主干（胸背部）"
+        case .belly: return "腹部区域"
+        case .limbs: return "四肢"
+        case .tail: return "尾巴"
+        }
+    }
+    
+    // 体温等级（影响颜色变化程度）
+    var temperatureLevel: Double {
+        switch self {
+        case .belly, .body: return 1.0      // 高体温区域
+        case .face: return 0.7              // 中等体温
+        case .ears, .limbs, .tail: return 0.3  // 低体温区域
+        }
+    }
+}
+
 // MARK: - 染色方法枚举
 enum DyeingMethod: CaseIterable {
     case solid        // 单色（均匀染色）
@@ -208,7 +277,14 @@ struct StepByStepBreedingView: View {
     @StateObject private var breedingState = BreedingState()
     @State private var showingResult = false
     
-    let totalSteps = 5
+    // 动态总步数：70%用户只有4步，30%用户有5步
+    let totalSteps: Int
+    
+    init() {
+        // 30%概率显示第5步
+        self.totalSteps = Double.random(in: 0...1) < 0.3 ? 5 : 4
+        print("🎯 用户获得\(totalSteps == 5 ? "完整5步" : "简化4步")体验")
+    }
     
     var body: some View {
         NavigationView {
@@ -304,7 +380,7 @@ struct StepByStepBreedingView: View {
                 return canProceed
             }
         case 4: return true // 加白可选
-        case 5: return true // 特殊调色自动
+        case 5: return true // 温度敏感调色完全可选，不强制选择
         default: return false
         }
     }
@@ -379,6 +455,11 @@ class BreedingState: ObservableObject {
     @Published var finalCat: Cat?
     @Published var uiRefreshTrigger: Int = 0  // UI刷新触发器
     
+    // 步骤5：温度敏感调色
+    @Published var selectedTemperatureEffect: TemperatureEffect?
+    @Published var selectedBodyParts: Set<BodyPart> = []
+    @Published var temperatureIntensity: Double = 0.5  // 温度效应强度 0-1
+    
     // 强制触发UI刷新
     func forceUIRefresh() {
         uiRefreshTrigger += 1
@@ -417,7 +498,20 @@ class BreedingState: ObservableObject {
                 selectedTabbySubtype = TabbySubtype.random()
             }
         }
-        // 其他属性使用默认值或随机值
+        
+        // 步骤5随机设置
+        if selectedTemperatureEffect == nil {
+            // 30%概率应用温度效果
+            if Double.random(in: 0...1) < 0.3 {
+                selectedTemperatureEffect = TemperatureEffect.allCases.randomElement()
+                if let effect = selectedTemperatureEffect {
+                    let availableParts = effect.availableBodyParts
+                    let randomCount = Int.random(in: 1...min(2, availableParts.count))
+                    selectedBodyParts = Set(availableParts.shuffled().prefix(randomCount))
+                    temperatureIntensity = Double.random(in: 0.3...0.8)
+                }
+            }
+        }
     }
     
     func generateFinalGenetics() -> GeneticsData {
@@ -1773,11 +1867,404 @@ struct Step5PlaceholderView: View {
     @ObservedObject var state: BreedingState
     
     var body: some View {
-        VStack {
-            Text("步骤 5：特殊调色")
-                .font(.title2)
-            Text("(占位 - 待实现)")
+        VStack(spacing: 8) {
+            Text("步骤 5：温度敏感调色")
+                .font(.title3)
+                .fontWeight(.bold)
+            
+            Text("基于体温分布的局部颜色调节")
+                .font(.caption)
                 .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            // 当前状态展示
+            if !state.chromosomes.isEmpty {
+                VStack(spacing: 8) {
+                    Text("当前猫咪预览：")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    HStack(spacing: 12) {
+                        ForEach(Array(state.chromosomes.enumerated()), id: \.offset) { index, chromosome in
+                            VStack(spacing: 4) {
+                                Text("第\(index + 1)条")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                
+                                // 展示叠加了前4步+温度效果
+                                TemperatureColorView(
+                                    chromosome: chromosome, 
+                                    dilutionLevel: state.dilutionLevel,
+                                    tabbySubtype: state.selectedTabbySubtype,
+                                    patternCoverage: state.patternCoverage,
+                                    whitePercentage: state.whitePercentage,
+                                    whiteAreas: state.selectedWhiteAreas,
+                                    temperatureEffect: state.selectedTemperatureEffect,
+                                    affectedParts: state.selectedBodyParts,
+                                    intensity: state.temperatureIntensity
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 温度效果选择
+            VStack(spacing: 8) {
+                Text("温度效应类型")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                HStack(spacing: 16) {
+                    ForEach(TemperatureEffect.allCases, id: \.self) { effect in
+                        TemperatureEffectCard(
+                            effect: effect,
+                            isSelected: state.selectedTemperatureEffect == effect
+                        ) {
+                            state.selectedTemperatureEffect = effect
+                            // 清除之前选择的部位，重新开始
+                            state.selectedBodyParts.removeAll()
+                        }
+                    }
+                }
+            }
+            
+            // 身体部位选择（仅在选择了温度效果时显示）
+            if let selectedEffect = state.selectedTemperatureEffect {
+                VStack(spacing: 8) {
+                    Text("选择\(selectedEffect.rawValue)部位")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    Text(selectedEffect.description)
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                    
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 8) {
+                        ForEach(selectedEffect.availableBodyParts, id: \.self) { part in
+                            BodyPartCard(
+                                part: part,
+                                isSelected: state.selectedBodyParts.contains(part)
+                            ) {
+                                if state.selectedBodyParts.contains(part) {
+                                    state.selectedBodyParts.remove(part)
+                                } else {
+                                    state.selectedBodyParts.insert(part)
+                                }
+                                print("🌡️ 切换身体部位: \(part.rawValue) -> \(state.selectedBodyParts.contains(part) ? "选中" : "取消")")
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 强度调节（仅在选择了部位时显示）
+            if !state.selectedBodyParts.isEmpty {
+                VStack(spacing: 6) {
+                    Text("效果强度：\(Int(state.temperatureIntensity * 100))%")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    HStack {
+                        Text("轻微")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Slider(value: Binding(
+                            get: { state.temperatureIntensity },
+                            set: { state.temperatureIntensity = $0 }
+                        ), in: 0...1)
+                            .onChange(of: state.temperatureIntensity) { oldValue, newValue in
+                                print("🌡️ 温度效应强度调节到: \(newValue)")
+                            }
+                            .accentColor(.orange)
+                        
+                        Text("强烈")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Text("影响颜色变化程度")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                }
+                .padding(.horizontal)
+            }
+            
+            // 快速选项
+            if state.selectedTemperatureEffect != nil {
+                HStack(spacing: 12) {
+                    Button("随机组合") {
+                        if let effect = state.selectedTemperatureEffect {
+                            let availableParts = effect.availableBodyParts
+                            let randomCount = Int.random(in: 1...min(2, availableParts.count))
+                            state.selectedBodyParts = Set(availableParts.shuffled().prefix(randomCount))
+                            state.temperatureIntensity = Double.random(in: 0.3...0.8)
+                            print("🎲 随机温度效应设置")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+                    
+                    Button("清除效果") {
+                        state.selectedTemperatureEffect = nil
+                        state.selectedBodyParts.removeAll()
+                        state.temperatureIntensity = 0.5
+                        print("🚫 清除温度效应")
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+        .onAppear {
+            print("🌡️ 步骤5加载完成 - 温度敏感调色系统")
+        }
+    }
+}
+
+// MARK: - 温度效果选择卡片
+struct TemperatureEffectCard: View {
+    let effect: TemperatureEffect
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Text(effect.emoji)
+                    .font(.system(size: 30))
+                
+                Text(effect.rawValue)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                
+                Text(effect.description)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            .frame(height: 90)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(backgroundColor)
+                    .stroke(borderColor, lineWidth: borderWidth)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private var backgroundColor: Color {
+        if isSelected {
+            return .orange.opacity(0.2)
+        } else {
+            return .gray.opacity(0.05)
+        }
+    }
+    
+    private var borderColor: Color {
+        if isSelected {
+            return .orange
+        } else {
+            return .clear
+        }
+    }
+    
+    private var borderWidth: CGFloat {
+        return isSelected ? 2 : 0
+    }
+}
+
+// MARK: - 身体部位选择卡片
+struct BodyPartCard: View {
+    let part: BodyPart
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Text(part.emoji)
+                    .font(.system(size: 24))
+                
+                Text(part.rawValue)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                
+                Text(part.description)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
+            }
+            .frame(height: 70)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(backgroundColor)
+                    .stroke(borderColor, lineWidth: borderWidth)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private var backgroundColor: Color {
+        if isSelected {
+            return .orange.opacity(0.2)
+        } else {
+            return .gray.opacity(0.05)
+        }
+    }
+    
+    private var borderColor: Color {
+        if isSelected {
+            return .orange
+        } else {
+            return .clear
+        }
+    }
+    
+    private var borderWidth: CGFloat {
+        return isSelected ? 2 : 0
+    }
+}
+
+// MARK: - 温度敏感颜色显示组件
+struct TemperatureColorView: View {
+    let chromosome: BaseColor
+    let dilutionLevel: Double
+    let tabbySubtype: TabbySubtype?
+    let patternCoverage: Double
+    let whitePercentage: Double
+    let whiteAreas: Set<WhiteArea>
+    let temperatureEffect: TemperatureEffect?
+    let affectedParts: Set<BodyPart>
+    let intensity: Double
+    
+    var body: some View {
+        let baseColor = ColorInterpolator.interpolateColor(
+            baseColor: chromosome, 
+            dilutionLevel: dilutionLevel
+        )
+        
+        RoundedRectangle(cornerRadius: 6)
+            .fill(Color(hex: baseColor))
+            .frame(width: 60, height: 45)
+            .overlay(
+                // 斑纹叠加层
+                patternOverlay
+            )
+            .overlay(
+                // 温度效应叠加层
+                temperatureOverlay
+            )
+            .overlay(
+                // 白色叠加层
+                whiteOverlay
+            )
+            .overlay(
+                // 文字标签
+                VStack(spacing: 2) {
+                    Text(ColorInterpolator.getColorName(
+                        baseColor: chromosome, 
+                        dilutionLevel: dilutionLevel
+                    ))
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .shadow(radius: 1)
+                    
+                    if let effect = temperatureEffect, !affectedParts.isEmpty {
+                        Text(effect.rawValue)
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.9))
+                            .shadow(radius: 1)
+                    }
+                }
+            )
+            .animation(.easeInOut(duration: 0.2), value: intensity)
+    }
+    
+    @ViewBuilder
+    private var patternOverlay: some View {
+        if let tabbyType = tabbySubtype, tabbyType != .none {
+            // 使用现有的斑纹渲染逻辑
+            ChromosomeColorView(
+                chromosome: chromosome,
+                dilutionLevel: dilutionLevel,
+                tabbySubtype: tabbyType,
+                patternCoverage: patternCoverage
+            )
+            .opacity(0)  // 透明，只使用其叠加效果
+        }
+    }
+    
+    @ViewBuilder
+    private var temperatureOverlay: some View {
+        if let effect = temperatureEffect, !affectedParts.isEmpty {
+            let temperatureGradient = createTemperatureGradient(effect: effect)
+            
+            RoundedRectangle(cornerRadius: 6)
+                .fill(temperatureGradient)
+                .opacity(intensity * 0.6)  // 根据强度调整透明度
+        }
+    }
+    
+    @ViewBuilder
+    private var whiteOverlay: some View {
+        if whitePercentage > 0.0 && !whiteAreas.isEmpty {
+            RoundedRectangle(cornerRadius: 6)
+                .fill(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            .white.opacity(whitePercentage * 0.9),
+                            .white.opacity(whitePercentage * 0.5)
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .opacity(0.8)
+        }
+    }
+    
+    private func createTemperatureGradient(effect: TemperatureEffect) -> some ShapeStyle {
+        switch effect {
+        case .lighten:
+            // 变浅效果：添加白色/黄色渐变
+            return AnyShapeStyle(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        .white.opacity(0.7),
+                        .yellow.opacity(0.3),
+                        .clear
+                    ]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        case .darken:
+            // 变深效果：添加黑色/棕色渐变
+            return AnyShapeStyle(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        .black.opacity(0.4),
+                        .brown.opacity(0.2),
+                        .clear
+                    ]),
+                    startPoint: .topTrailing,
+                    endPoint: .bottomLeading
+                )
+            )
         }
     }
 }

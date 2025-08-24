@@ -3,7 +3,8 @@
     "allow": [
       "Bash(mkdir:*)",
       "Bash(xcodebuild:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(swiftc:*)"
     ],
     "deny": [],
     "ask": []
