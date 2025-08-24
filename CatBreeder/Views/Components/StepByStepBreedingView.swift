@@ -275,7 +275,7 @@ struct StepByStepBreedingView: View {
     
     @State private var currentStep = 1
     @StateObject private var breedingState = BreedingState()
-    @State private var showingResult = false
+    @State private var isCompleted = false  // 标记是否已完成合成
     
     // 动态总步数：70%用户只有4步，30%用户有5步
     let totalSteps: Int
@@ -289,46 +289,50 @@ struct StepByStepBreedingView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // 步骤指示器
-                StepIndicator(currentStep: currentStep, totalSteps: totalSteps)
+                // 步骤指示器（完成后不显示）
+                if !isCompleted {
+                    StepIndicator(currentStep: currentStep, totalSteps: totalSteps)
+                }
                 
                 // 当前步骤内容（使用更紧凑的布局）
                 currentStepView
                 
                 Spacer(minLength: 8)
                 
-                // 底部按钮区域
-                if currentStep == 1 {
-                    // 步骤1使用内部控制，不显示外部按钮
-                    Step1BottomControls(onSkip: skipToResult)
-                } else {
-                    BottomControls(
-                        currentStep: currentStep,
-                        totalSteps: totalSteps,
-                        canProceed: canProceedToNextStep,
-                        isCompleted: breedingState.isCompleted,
-                        onPrevious: previousStep,
-                        onNext: nextStep,
-                        onSkip: skipToResult,
-                        onFinish: finishBreeding
-                    )
+                // 底部按钮区域（完成后不显示）
+                if !isCompleted {
+                    if currentStep == 1 {
+                        // 步骤1使用内部控制，不显示外部按钮
+                        Step1BottomControls(onSkip: skipToResult)
+                    } else {
+                        BottomControls(
+                            currentStep: currentStep,
+                            totalSteps: totalSteps,
+                            canProceed: canProceedToNextStep,
+                            isCompleted: breedingState.isCompleted,
+                            onPrevious: previousStep,
+                            onNext: nextStep,
+                            onSkip: skipToResult,
+                            onFinish: finishBreeding
+                        )
+                    }
                 }
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
-            .navigationTitle("猫咪合成")
+            .navigationTitle(isCompleted ? "合成完成" : "猫咪合成")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("返回") {
-                        dismiss()
+                    if isCompleted {
+                        Button("重新开始") {
+                            restartBreeding()
+                        }
+                    } else {
+                        Button("返回") {
+                            dismiss()
+                        }
                     }
-                }
-            }
-            .sheet(isPresented: $showingResult) {
-                if let cat = breedingState.finalCat {
-                    CatResultView(cat: cat, breedingSummary: breedingState.breedingSummary)
-                        .environmentObject(gameData)
                 }
             }
         }
@@ -337,21 +341,34 @@ struct StepByStepBreedingView: View {
     // MARK: - 当前步骤视图
     @ViewBuilder
     private var currentStepView: some View {
-        switch currentStep {
-        case 1:
-            Step1PlaceholderView(state: breedingState) {
-                nextStep() // 完成步骤1后进入步骤2
+        if isCompleted {
+            // 合成完成后显示结果页面
+            if let cat = breedingState.finalCat {
+                CompletedResultView(
+                    cat: cat, 
+                    breedingSummary: breedingState.breedingSummary,
+                    onRestart: restartBreeding,
+                    onDismiss: { dismiss() }
+                )
             }
-        case 2:
-            Step2PlaceholderView(state: breedingState)
-        case 3:
-            Step3PlaceholderView(state: breedingState)
-        case 4:
-            Step4PlaceholderView(state: breedingState)
-        case 5:
-            Step5PlaceholderView(state: breedingState)
-        default:
-            Text("未知步骤")
+        } else {
+            // 正常的步骤流程
+            switch currentStep {
+            case 1:
+                Step1PlaceholderView(state: breedingState) {
+                    nextStep() // 完成步骤1后进入步骤2
+                }
+            case 2:
+                Step2PlaceholderView(state: breedingState)
+            case 3:
+                Step3PlaceholderView(state: breedingState)
+            case 4:
+                Step4PlaceholderView(state: breedingState)
+            case 5:
+                Step5PlaceholderView(state: breedingState)
+            default:
+                Text("未知步骤")
+            }
         }
     }
     
@@ -442,8 +459,20 @@ struct StepByStepBreedingView: View {
         gameData.addCat(cat)
         _ = gameData.spendCoins(50)
         
+        // 切换到完成状态，显示结果页面
+        isCompleted = true
+        
         print("🎉 合成完成！已生成详细汇总信息，流程变为不可逆")
-        showingResult = true
+    }
+    
+    // 重新开始合成
+    private func restartBreeding() {
+        // 重置所有状态
+        isCompleted = false
+        currentStep = 1
+        breedingState.resetToInitialState()
+        
+        print("🔄 重新开始合成")
     }
 }
 
@@ -509,7 +538,7 @@ enum CatBreed: String, CaseIterable {
         }
         
         // 俄罗斯蓝猫：稀释的黑色，无斑纹
-        if chromosomes.contains(.black) && dilutionLevel > 0.7 && tabbySubtype == .none {
+        if chromosomes.contains(.black) && dilutionLevel > 0.7 && tabbySubtype == TabbySubtype.none {
             return .russianBlue
         }
         
@@ -524,7 +553,7 @@ enum CatBreed: String, CaseIterable {
         }
         
         // 波斯猫：纯色，优雅特征
-        if tabbySubtype == .none && dilutionLevel < 0.3 {
+        if tabbySubtype == TabbySubtype.none && dilutionLevel < 0.3 {
             return .persianCat
         }
         
@@ -830,6 +859,30 @@ class BreedingState: ObservableObject {
     // 合成完成后的详细信息
     @Published var breedingSummary: BreedingSummary?
     @Published var isCompleted: Bool = false  // 标记合成是否已完成（不可逆）
+    
+    // 重置到初始状态
+    func resetToInitialState() {
+        selectedSex = nil
+        isXXY = false
+        chromosomes = []
+        dilutionLevel = 0.0
+        dyeingMethodLevel = 0.0
+        selectedPattern = nil
+        selectedTabbySubtype = nil
+        patternCoverage = 0.5
+        whitePercentage = 0.0
+        selectedWhiteAreas = []
+        specialEffects = []
+        finalCat = nil
+        selectedTemperatureEffect = nil
+        selectedBodyParts = []
+        temperatureIntensity = 0.5
+        breedingSummary = nil
+        isCompleted = false
+        uiRefreshTrigger = 0
+        
+        print("🔄 BreedingState 已重置到初始状态")
+    }
     
     // 强制触发UI刷新
     func forceUIRefresh() {
@@ -2720,6 +2773,77 @@ extension Step2PlaceholderView {
         print("  4. 稀释百分比文字应与滑块位置同步")
         print("  5. 效果描述文字应实时更新")
         print("  6. 多条染色体应同时响应变化")
+    }
+}
+
+// MARK: - 完成后的结果页面组件
+struct CompletedResultView: View {
+    let cat: Cat
+    let breedingSummary: BreedingSummary?
+    let onRestart: () -> Void
+    let onDismiss: () -> Void
+    @State private var selectedTab = 0  // 0: 猫咪信息, 1: 合成过程
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // 庆祝效果
+                VStack(spacing: 20) {
+                    Text("🎉")
+                        .font(.system(size: 60))
+                    
+                    Text("恭喜获得新猫咪！")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                }
+                .padding(.bottom, 20)
+                
+                // 猫咪展示
+                CatCardView(cat: cat, size: .large)
+                    .padding(.bottom, 20)
+                
+                // 标签切换（只有当有合成汇总时才显示）
+                if breedingSummary != nil {
+                    Picker("信息类型", selection: $selectedTab) {
+                        Text("猫咪信息").tag(0)
+                        Text("合成过程").tag(1)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+                    .padding(.bottom, 16)
+                }
+                
+                // 内容区域
+                VStack(spacing: 16) {
+                    if selectedTab == 0 {
+                        // 猫咪详细信息
+                        CatDetailInfo(cat: cat, breedingSummary: breedingSummary)
+                    } else if let summary = breedingSummary {
+                        // 合成过程信息
+                        BreedingProcessView(summary: summary)
+                    }
+                }
+                .padding(.horizontal)
+                
+                // 操作按钮
+                VStack(spacing: 16) {
+                    Button("再次合成") {
+                        onRestart()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+                    
+                    Button("返回主界面") {
+                        onDismiss()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+                }
+                .padding()
+            }
+        }
     }
 }
 
