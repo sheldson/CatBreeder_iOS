@@ -41,6 +41,45 @@ enum TabbySubtype: String, CaseIterable {
     }
 }
 
+// MARK: - 白斑区域枚举
+enum WhiteArea: String, CaseIterable {
+    case forehead = "额头"
+    case noseBridge = "鼻梁" 
+    case chin = "下巴"
+    case leftEyeRing = "左眼圈"
+    case rightEyeRing = "右眼圈"
+    case muzzle = "嘴周"
+    case leftCheek = "左脸颊"
+    case rightCheek = "右脸颊"
+    
+    var emoji: String {
+        switch self {
+        case .forehead: return "🤔"
+        case .noseBridge: return "👃"
+        case .chin: return "😮"
+        case .leftEyeRing: return "👁️"
+        case .rightEyeRing: return "👁️"
+        case .muzzle: return "😺"
+        case .leftCheek: return "😊"
+        case .rightCheek: return "😊"
+        }
+    }
+    
+    var position: CGPoint {
+        // 相对于200x200猫脸的位置坐标
+        switch self {
+        case .forehead: return CGPoint(x: 100, y: 60)
+        case .noseBridge: return CGPoint(x: 100, y: 100)
+        case .chin: return CGPoint(x: 100, y: 160)
+        case .leftEyeRing: return CGPoint(x: 75, y: 85)
+        case .rightEyeRing: return CGPoint(x: 125, y: 85)
+        case .muzzle: return CGPoint(x: 100, y: 130)
+        case .leftCheek: return CGPoint(x: 60, y: 110)
+        case .rightCheek: return CGPoint(x: 140, y: 110)
+        }
+    }
+}
+
 // MARK: - 染色方法枚举
 enum DyeingMethod: CaseIterable {
     case solid        // 单色（均匀染色）
@@ -166,7 +205,7 @@ struct StepByStepBreedingView: View {
     @Environment(\.dismiss) private var dismiss
     
     @State private var currentStep = 1
-    @State private var breedingState = BreedingState()
+    @StateObject private var breedingState = BreedingState()
     @State private var showingResult = false
     
     let totalSteps = 5
@@ -223,7 +262,7 @@ struct StepByStepBreedingView: View {
     private var currentStepView: some View {
         switch currentStep {
         case 1:
-            Step1PlaceholderView(state: $breedingState) {
+            Step1PlaceholderView(state: breedingState) {
                 nextStep() // 完成步骤1后进入步骤2
             }
         case 2:
@@ -231,9 +270,9 @@ struct StepByStepBreedingView: View {
         case 3:
             Step3PlaceholderView(state: breedingState)
         case 4:
-            Step4PlaceholderView(state: $breedingState)
+            Step4PlaceholderView(state: breedingState)
         case 5:
-            Step5PlaceholderView(state: $breedingState)
+            Step5PlaceholderView(state: breedingState)
         default:
             Text("未知步骤")
         }
@@ -246,10 +285,23 @@ struct StepByStepBreedingView: View {
         case 2: return true // 稀释基因可选
         case 3: 
             // 橘猫必须选择斑纹，其他猫咪可选
-            if breedingState.isOrangeCat() {
-                return breedingState.selectedTabbySubtype != nil && breedingState.selectedTabbySubtype != .none
+            let timestamp = Date().timeIntervalSince1970
+            let trigger = breedingState.uiRefreshTrigger  // 显式依赖触发器
+            let isOrangeCat = breedingState.isOrangeCat()
+            let hasSelectedTabby = breedingState.selectedTabbySubtype != nil
+            let selectedTabbyType = breedingState.selectedTabbySubtype
+            
+            print("🔄 [\(timestamp)] canProceedToNextStep 重新计算 (trigger=\(trigger))")
+            print("🐱 步骤3进度检查: 橘猫=\(isOrangeCat), 已选斑纹=\(hasSelectedTabby), 选择的类型=\(selectedTabbyType?.rawValue ?? "无")")
+            
+            if isOrangeCat {
+                let canProceed = hasSelectedTabby && selectedTabbyType != TabbySubtype.none
+                print("🍊 橘猫逻辑: 可进行下一步=\(canProceed)")
+                return canProceed
             } else {
-                return breedingState.selectedTabbySubtype != nil
+                let canProceed = hasSelectedTabby
+                print("🐾 普通猫逻辑: 可进行下一步=\(canProceed)")
+                return canProceed
             }
         case 4: return true // 加白可选
         case 5: return true // 特殊调色自动
@@ -322,8 +374,16 @@ class BreedingState: ObservableObject {
     @Published var selectedTabbySubtype: TabbySubtype?
     @Published var patternCoverage: Double = 0.5  // 斑纹覆盖度 0-100%
     @Published var whitePercentage: Double = 0.0
+    @Published var selectedWhiteAreas: Set<WhiteArea> = []  // 白斑区域选择
     @Published var specialEffects: [GeneticModifier] = []
     @Published var finalCat: Cat?
+    @Published var uiRefreshTrigger: Int = 0  // UI刷新触发器
+    
+    // 强制触发UI刷新
+    func forceUIRefresh() {
+        uiRefreshTrigger += 1
+        print("🔄 [BreedingState] 强制UI刷新触发: \(uiRefreshTrigger)")
+    }
     
     // 检测是否为橘猫（需要强制选择斑纹）
     func isOrangeCat() -> Bool {
@@ -505,6 +565,12 @@ struct BottomControls: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(!canProceed)
                 .frame(maxWidth: .infinity)
+                .onAppear {
+                    print("🎯 [BottomControls] 步骤\(currentStep) - canProceed = \(canProceed)")
+                }
+                .onChange(of: canProceed) { oldValue, newValue in
+                    print("🎯 [BottomControls] 步骤\(currentStep) - canProceed 变化: \(oldValue) → \(newValue)")
+                }
             }
             
             // 跳过按钮
@@ -526,7 +592,7 @@ struct BottomControls: View {
 
 // MARK: - 步骤1：性别和染色体选择
 struct Step1PlaceholderView: View {
-    @Binding var state: BreedingState
+    @ObservedObject var state: BreedingState
     @State private var isExtracting = false
     @State private var step1Phase: Step1Phase = .sexSelection
     let onComplete: () -> Void // 完成步骤1的回调
@@ -1059,12 +1125,16 @@ struct ChromosomeColorView: View {
     let dilutionLevel: Double
     let tabbySubtype: TabbySubtype?
     let patternCoverage: Double
+    let whitePercentage: Double
+    let whiteAreas: Set<WhiteArea>
     
-    init(chromosome: BaseColor, dilutionLevel: Double, tabbySubtype: TabbySubtype? = nil, patternCoverage: Double = 0.5) {
+    init(chromosome: BaseColor, dilutionLevel: Double, tabbySubtype: TabbySubtype? = nil, patternCoverage: Double = 0.5, whitePercentage: Double = 0.0, whiteAreas: Set<WhiteArea> = []) {
         self.chromosome = chromosome
         self.dilutionLevel = dilutionLevel
         self.tabbySubtype = tabbySubtype
         self.patternCoverage = patternCoverage
+        self.whitePercentage = whitePercentage
+        self.whiteAreas = whiteAreas
     }
     
     var body: some View {
@@ -1079,6 +1149,10 @@ struct ChromosomeColorView: View {
             .overlay(
                 // 斑纹叠加层
                 patternOverlay
+            )
+            .overlay(
+                // 白色叠加层
+                whiteOverlay
             )
             .overlay(
                 // 文字标签
@@ -1102,7 +1176,8 @@ struct ChromosomeColorView: View {
             )
             .animation(.easeInOut(duration: 0.2), value: dilutionLevel)
             .animation(.easeInOut(duration: 0.2), value: patternCoverage)
-            .id("\(chromosome.rawValue)-\(dilutionLevel)-\(tabbySubtype?.rawValue ?? "none")-\(patternCoverage)") // 强制刷新
+            .animation(.easeInOut(duration: 0.2), value: whitePercentage)
+            .id("\(chromosome.rawValue)-\(dilutionLevel)-\(tabbySubtype?.rawValue ?? "none")-\(patternCoverage)-\(whitePercentage)-\(whiteAreas.count)") // 强制刷新
     }
     
     @ViewBuilder
@@ -1110,6 +1185,24 @@ struct ChromosomeColorView: View {
         if let tabbyType = tabbySubtype, tabbyType != .none {
             patternFill(for: tabbyType)
                 .opacity(patternCoverage * 0.6) // 根据覆盖度调整透明度
+        }
+    }
+    
+    @ViewBuilder
+    private var whiteOverlay: some View {
+        if whitePercentage > 0.0 && !whiteAreas.isEmpty {
+            RoundedRectangle(cornerRadius: 6)
+                .fill(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            .white.opacity(whitePercentage * 0.9),
+                            .white.opacity(whitePercentage * 0.5)
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .opacity(0.8) // 基础透明度，让底色可见
         }
     }
     
@@ -1246,8 +1339,18 @@ struct Step3PlaceholderView: View {
                             isDisabled: state.isOrangeCat() && subtype == .none
                         ) {
                             if !(state.isOrangeCat() && subtype == .none) {
+                                print("🎨 [开始] 选择斑纹类型: \(subtype.rawValue)")
+                                print("🎨 [更新前] selectedTabbySubtype = \(state.selectedTabbySubtype?.rawValue ?? "nil")")
                                 state.selectedTabbySubtype = subtype
-                                print("🎨 选择斑纹类型: \(subtype.rawValue)")
+                                print("🎨 [更新后] selectedTabbySubtype = \(state.selectedTabbySubtype?.rawValue ?? "nil")")
+                                
+                                // 强制触发UI更新
+                                state.forceUIRefresh()
+                                
+                                // 异步再次检查状态
+                                DispatchQueue.main.async {
+                                    print("🎨 [异步检查] selectedTabbySubtype = \(state.selectedTabbySubtype?.rawValue ?? "nil")")
+                                }
                             }
                         }
                     }
@@ -1302,8 +1405,15 @@ struct Step3PlaceholderView: View {
                 
                 if !state.isOrangeCat() {
                     Button("跳过斑纹") {
-                        state.selectedTabbySubtype = .none
+                        print("⚪ [开始] 跳过斑纹按钮点击")
+                        print("⚪ [更新前] selectedTabbySubtype = \(state.selectedTabbySubtype?.rawValue ?? "nil")")
+                        state.selectedTabbySubtype = TabbySubtype.none
                         state.patternCoverage = 0.0
+                        print("⚪ [更新后] selectedTabbySubtype = \(state.selectedTabbySubtype?.rawValue ?? "nil")")
+                        
+                        // 强制触发UI更新
+                        state.forceUIRefresh()
+                        
                         print("⚪ 跳过斑纹，设置为无斑纹")
                     }
                     .buttonStyle(.bordered)
@@ -1314,9 +1424,17 @@ struct Step3PlaceholderView: View {
         .padding(.top, 8)
         .padding(.bottom, 12)
         .onAppear {
-            // 橘猫自动选择第一个斑纹类型（如果还没选择）
-            if state.isOrangeCat() && state.selectedTabbySubtype == nil {
-                state.selectedTabbySubtype = TabbySubtype.allCases.first { $0 != .none }
+            // 如果还没选择斑纹类型，设置默认值
+            if state.selectedTabbySubtype == nil {
+                if state.isOrangeCat() {
+                    // 橘猫自动选择第一个非无斑纹类型
+                    state.selectedTabbySubtype = TabbySubtype.allCases.first { $0 != .none }
+                    print("🍊 橘猫自动选择斑纹: \(state.selectedTabbySubtype?.rawValue ?? "无")")
+                } else {
+                    // 普通猫默认选择"无斑纹"
+                    state.selectedTabbySubtype = TabbySubtype.none
+                    print("🐾 普通猫默认选择: 无斑纹")
+                }
             }
         }
     }
@@ -1384,21 +1502,275 @@ struct TabbyTypeCard: View {
     }
 }
 
-struct Step4PlaceholderView: View {
-    @Binding var state: BreedingState
+// MARK: - 猫脸白斑选择器
+struct CatFaceSelector: View {
+    @Binding var selectedAreas: Set<WhiteArea>
     
     var body: some View {
-        VStack {
-            Text("步骤 4：加白设置")
-                .font(.title2)
-            Text("(占位 - 待实现)")
-                .foregroundColor(.secondary)
+        ZStack {
+            // 猫脸轮廓
+            CatFaceOutline()
+            
+            // 可点击的区域
+            ForEach(WhiteArea.allCases, id: \.self) { area in
+                ClickableWhiteArea(
+                    area: area,
+                    isSelected: selectedAreas.contains(area)
+                ) {
+                    toggleArea(area)
+                }
+            }
+        }
+        .frame(width: 200, height: 200)
+    }
+    
+    private func toggleArea(_ area: WhiteArea) {
+        if selectedAreas.contains(area) {
+            selectedAreas.remove(area)
+        } else {
+            selectedAreas.insert(area)
+        }
+        print("🐱 切换白斑区域: \(area.rawValue) -> \(selectedAreas.contains(area) ? "选中" : "取消")")
+    }
+}
+
+// MARK: - 猫脸轮廓
+struct CatFaceOutline: View {
+    var body: some View {
+        ZStack {
+            // 主要脸部轮廓
+            RoundedRectangle(cornerRadius: 80)
+                .stroke(.gray.opacity(0.5), lineWidth: 2)
+                .frame(width: 160, height: 180)
+            
+            // 耳朵
+            HStack(spacing: 100) {
+                Triangle()
+                    .stroke(.gray.opacity(0.5), lineWidth: 2)
+                    .frame(width: 30, height: 40)
+                    .offset(y: -70)
+                Triangle()
+                    .stroke(.gray.opacity(0.5), lineWidth: 2)
+                    .frame(width: 30, height: 40)
+                    .offset(y: -70)
+            }
+            
+            // 眼睛轮廓
+            HStack(spacing: 50) {
+                Circle()
+                    .stroke(.gray.opacity(0.3), lineWidth: 1)
+                    .frame(width: 20, height: 20)
+                    .offset(y: -15)
+                Circle()
+                    .stroke(.gray.opacity(0.3), lineWidth: 1)
+                    .frame(width: 20, height: 20)
+                    .offset(y: -15)
+            }
+            
+            // 鼻子
+            Circle()
+                .fill(.gray.opacity(0.3))
+                .frame(width: 8, height: 8)
+            
+            // 嘴巴轮廓
+            Path { path in
+                path.move(to: CGPoint(x: 100, y: 115))
+                path.addCurve(
+                    to: CGPoint(x: 85, y: 125),
+                    control1: CGPoint(x: 95, y: 118),
+                    control2: CGPoint(x: 90, y: 121)
+                )
+                path.move(to: CGPoint(x: 100, y: 115))
+                path.addCurve(
+                    to: CGPoint(x: 115, y: 125),
+                    control1: CGPoint(x: 105, y: 118),
+                    control2: CGPoint(x: 110, y: 121)
+                )
+            }
+            .stroke(.gray.opacity(0.3), lineWidth: 1)
         }
     }
 }
 
+// MARK: - 三角形形状（耳朵）
+struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.minY))
+        return path
+    }
+}
+
+// MARK: - 可点击的白斑区域
+struct ClickableWhiteArea: View {
+    let area: WhiteArea
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(isSelected ? .white.opacity(0.8) : .gray.opacity(0.2))
+                    .frame(width: 24, height: 24)
+                    .overlay(
+                        Circle()
+                            .stroke(isSelected ? .blue : .gray, lineWidth: isSelected ? 2 : 1)
+                    )
+                
+                Text(area.emoji)
+                    .font(.caption2)
+                    .opacity(isSelected ? 0.7 : 1.0)
+            }
+        }
+        .buttonStyle(.plain)
+        .position(area.position)
+    }
+}
+
+struct Step4PlaceholderView: View {
+    @ObservedObject var state: BreedingState
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("步骤 4：加白设置")
+                .font(.title3)
+                .fontWeight(.bold)
+            
+            Text("调整白色分布范围和强度")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            // 当前状态展示
+            if !state.chromosomes.isEmpty {
+                VStack(spacing: 8) {
+                    Text("当前猫咪预览：")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    HStack(spacing: 12) {
+                        ForEach(Array(state.chromosomes.enumerated()), id: \.offset) { index, chromosome in
+                            VStack(spacing: 4) {
+                                Text("第\(index + 1)条")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                
+                                // 展示叠加了前3步效果+白色效果
+                                ChromosomeColorView(
+                                    chromosome: chromosome, 
+                                    dilutionLevel: state.dilutionLevel,
+                                    tabbySubtype: state.selectedTabbySubtype,
+                                    patternCoverage: state.patternCoverage,
+                                    whitePercentage: state.whitePercentage,
+                                    whiteAreas: state.selectedWhiteAreas
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 加白程度滑块
+            VStack(spacing: 6) {
+                Text("加白程度：\(Int(state.whitePercentage * 100))%")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                HStack {
+                    Text("无白")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Slider(value: Binding(
+                        get: { state.whitePercentage },
+                        set: { state.whitePercentage = $0 }
+                    ), in: 0...1)
+                        .onChange(of: state.whitePercentage) { oldValue, newValue in
+                            print("⚪ 加白程度调节到: \(newValue)")
+                        }
+                        .accentColor(.blue)
+                    
+                    Text("纯白")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Text("影响白色覆盖范围")
+                    .font(.caption2)
+                    .foregroundColor(.blue)
+            }
+            .padding(.horizontal)
+            
+            // 猫脸白斑精选器
+            VStack(spacing: 6) {
+                Text("白斑精选区域")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                CatFaceSelector(selectedAreas: Binding(
+                    get: { state.selectedWhiteAreas },
+                    set: { state.selectedWhiteAreas = $0 }
+                ))
+                .frame(height: 200)
+                
+                Text("点击猫脸区域选择白斑位置")
+                    .font(.caption2)
+                    .foregroundColor(.blue)
+                    .multilineTextAlignment(.center)
+            }
+            
+            // 快速选项
+            VStack(spacing: 6) {
+                HStack(spacing: 12) {
+                    Button("随机白斑") {
+                        let randomCount = Int.random(in: 1...3)
+                        state.selectedWhiteAreas = Set(WhiteArea.allCases.shuffled().prefix(randomCount))
+                        state.whitePercentage = Double.random(in: 0.2...0.8)
+                        print("🎲 随机白斑设置: \(state.selectedWhiteAreas.count)个区域, \(Int(state.whitePercentage * 100))%强度")
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+                    
+                    Button("经典白胸") {
+                        state.selectedWhiteAreas = [.chin, .muzzle]
+                        state.whitePercentage = 0.4
+                        print("🤍 经典白胸设置")
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+                }
+                
+                HStack(spacing: 12) {
+                    Button("双色猫") {
+                        state.selectedWhiteAreas = [.forehead, .chin, .muzzle, .leftCheek, .rightCheek]
+                        state.whitePercentage = 0.6
+                        print("🔵 双色猫设置")
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+                    
+                    Button("清除白色") {
+                        state.selectedWhiteAreas.removeAll()
+                        state.whitePercentage = 0.0
+                        print("🚫 清除所有白色设置")
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+    }
+}
+
 struct Step5PlaceholderView: View {
-    @Binding var state: BreedingState
+    @ObservedObject var state: BreedingState
     
     var body: some View {
         VStack {
