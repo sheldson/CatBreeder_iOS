@@ -24,3 +24,20 @@ Design/backup/
 
 # IDE文件
 .vscode/settings.json
+
+# 🔐 安全配置文件 - 绝对不要提交！
+Config.swift
+**/Config.swift
+secrets.swift
+**/secrets.swift
+api-keys.swift
+**/api-keys.swift
+*.env
+.env*
+**/.env*
+
+# API Keys 和敏感信息
+**/APIKeys/
+secrets/
+api_keys.json
+config.json

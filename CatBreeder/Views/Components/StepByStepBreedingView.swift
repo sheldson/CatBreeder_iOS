@@ -402,7 +402,8 @@ struct StepByStepBreedingView: View {
                     cat: cat, 
                     breedingSummary: breedingState.breedingSummary,
                     onRestart: restartBreeding,
-                    onDismiss: { dismiss() }
+                    onDismiss: { dismiss() },
+                    breedingState: breedingState
                 )
             }
         } else {
@@ -517,6 +518,7 @@ struct StepByStepBreedingView: View {
         isCompleted = true
         
         print("🎉 合成完成！已生成详细汇总信息，流程变为不可逆")
+        print("💡 MVP集成：用户可以选择生成AI卡通头像")
     }
     
     // 重新开始合成
@@ -920,6 +922,11 @@ class BreedingState: ObservableObject {
     @Published var breedingSummary: BreedingSummary?
     @Published var isCompleted: Bool = false  // 标记合成是否已完成（不可逆）
     
+    // AI图片生成相关状态 (MVP版本 - 最简设计)
+    @Published var aiCartoonImage: GeneratedImage?     // 生成的卡通图片
+    @Published var isGeneratingAI: Bool = false        // 生成状态
+    @Published var aiGenerationError: String?          // 错误信息
+    
     // 重置到初始状态
     func resetToInitialState() {
         selectedSex = nil
@@ -941,6 +948,11 @@ class BreedingState: ObservableObject {
         isCompleted = false
         uiRefreshTrigger = 0
         
+        // 重置AI图片生成状态
+        aiCartoonImage = nil
+        isGeneratingAI = false
+        aiGenerationError = nil
+        
         print("🔄 BreedingState 已重置到初始状态")
     }
     
@@ -948,6 +960,42 @@ class BreedingState: ObservableObject {
     func forceUIRefresh() {
         uiRefreshTrigger += 1
         print("🔄 [BreedingState] 强制UI刷新触发: \(uiRefreshTrigger)")
+    }
+    
+    // MVP版本：生成AI卡通图片 (固定参数)
+    @MainActor
+    func generateAICartoonImage() async {
+        guard let cat = finalCat,
+              let summary = breedingSummary else { 
+            print("❌ [BreedingState] 无法生成AI图片：finalCat或breedingSummary为空")
+            return 
+        }
+        
+        print("🎨 [BreedingState] 开始基于详细合成汇总生成AI卡通图片")
+        print("📋 [BreedingState] 使用合成汇总：\(summary.detailedColorDescription)")
+        isGeneratingAI = true
+        aiGenerationError = nil
+        
+        do {
+            // 使用新的基于合成汇总的方法：卡通风格 + 标准质量
+            let imageGenerator = ImageGenerator.shared
+            let generatedImage = try await imageGenerator.generateCatImageFromSummary(
+                from: summary,
+                style: .cartoon,    // MVP固定：卡通风格
+                quality: .standard  // MVP固定：标准质量
+            )
+            
+            aiCartoonImage = generatedImage
+            print("✅ [BreedingState] AI卡通图片生成成功")
+            print("📸 [BreedingState] 图片URL: \(generatedImage.imageUrl)")
+            print("🎨 [BreedingState] 设置isGeneratingAI = false")
+            
+        } catch {
+            aiGenerationError = error.localizedDescription
+            print("❌ [BreedingState] AI图片生成失败: \(error.localizedDescription)")
+        }
+        
+        isGeneratingAI = false
     }
     
     // 检测是否为橘猫（需要强制选择斑纹）
@@ -2854,6 +2902,7 @@ struct CompletedResultView: View {
     let breedingSummary: BreedingSummary?
     let onRestart: () -> Void
     let onDismiss: () -> Void
+    let breedingState: BreedingState
     @State private var selectedTab = 0  // 0: 猫咪信息, 1: 合成过程
     
     var body: some View {
@@ -2899,6 +2948,70 @@ struct CompletedResultView: View {
                 
                 // 操作按钮
                 VStack(spacing: 16) {
+                    // MVP版本：AI生成卡通头像按钮
+                    Button(action: {
+                        Task {
+                            await breedingState.generateAICartoonImage()
+                        }
+                    }) {
+                        HStack {
+                            if breedingState.isGeneratingAI {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                Text("生成中...")
+                            } else if breedingState.aiCartoonImage != nil {
+                                Image(systemName: "photo.fill")
+                                Text("重新生成卡通头像")
+                            } else {
+                                Image(systemName: "sparkles")
+                                Text("生成卡通头像")
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(breedingState.isGeneratingAI)
+                    
+                    // AI生成结果显示
+                    if let aiImage = breedingState.aiCartoonImage {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("🎨 AI卡通头像")
+                                .font(.headline)
+                            
+                            if let imageURL = URL(string: aiImage.imageUrl) {
+                                AsyncImage(url: imageURL) { image in
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                } placeholder: {
+                                    ProgressView()
+                                        .frame(height: 200)
+                                }
+                                .frame(maxHeight: 200)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                        }
+                        .padding()
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    
+                    // AI生成错误显示
+                    if let error = breedingState.aiGenerationError {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    
+                    Divider()
+                        .padding(.vertical, 8)
+                    
                     Button("再次合成") {
                         onRestart()
                     }

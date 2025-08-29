@@ -4,7 +4,10 @@
       "Bash(mkdir:*)",
       "Bash(xcodebuild:*)",
       "Bash(git add:*)",
-      "Bash(swiftc:*)"
+      "Bash(swiftc:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Read(/var/folders/4g/7dll6hyn7f7_shpv483jzxqc0000gn/T/TemporaryItems/NSIRD_screencaptureui_mtOJ3k/**)"
     ],
     "deny": [],
     "ask": []
