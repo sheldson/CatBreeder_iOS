@@ -222,19 +222,12 @@ struct AIPerformanceTestView: View {
                 analysisReport = nil
             }
             
-            do {
-                let report = await performanceAnalyzer.analyzeFullAIWorkflow(cat: testCat)
-                
-                await MainActor.run {
-                    analysisReport = report
-                    isRunningTest = false
-                    currentTestName = ""
-                }
-            } catch {
-                await MainActor.run {
-                    isRunningTest = false
-                    currentTestName = ""
-                }
+            let report = await performanceAnalyzer.analyzeFullAIWorkflow(cat: testCat)
+            
+            await MainActor.run {
+                analysisReport = report
+                isRunningTest = false
+                currentTestName = ""
             }
         }
     }

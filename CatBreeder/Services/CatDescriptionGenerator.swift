@@ -62,15 +62,35 @@ class CatDescriptionGenerator {
         // 从详细描述中提取关键信息
         let details = summary.detailedColorDescription
         
-        // 基础颜色基因信息
-        if details.contains("单一") || details.contains("基因") {
-            if details.contains("橙色基因") {
+        // 基础颜色基因信息（基于真实遗传学）
+        // 特殊处理：O基因与非O基因混合 = 玳瑁/三花
+        if (details.contains("橙色(O)") && (details.contains("黑色(B)") || details.contains("巧克力色(b)") || details.contains("肉桂色(b')"))) ||
+           ((details.contains("黑色(B)") || details.contains("巧克力色(b)") || details.contains("肉桂色(b')")) && details.contains("橙色(O)")) {
+            // O基因与B系基因混合产生玳瑁效果
+            components.append("tortoiseshell cat")
+            
+            // 判断具体的B系基因类型
+            if details.contains("黑色(B)") {
+                components.append("black and orange tortoiseshell")
+            } else if details.contains("巧克力色(b)") {
+                components.append("chocolate tortoiseshell")
+            } else if details.contains("肉桂色(b')") {
+                components.append("cinnamon tortoiseshell")
+            }
+            
+            // 如果有较多白色，添加三花标记
+            if details.contains("白斑") || details.contains("白袜") {
+                components.append("calico pattern")
+            }
+        } else if details.contains("单一") || details.contains("双重") || details.contains("混合基因") {
+            // 其他单一或双重基因情况
+            if details.contains("橙色(O)") {
                 components.append("orange cat")
-            } else if details.contains("黑色基因") {
+            } else if details.contains("黑色(B)") {
                 components.append("black cat")
-            } else if details.contains("巧克力基因") {
+            } else if details.contains("巧克力色(b)") {
                 components.append("brown cat")
-            } else if details.contains("肉桂基因") {
+            } else if details.contains("肉桂色(b')") {
                 components.append("cinnamon cat")
             }
         }
@@ -95,15 +115,17 @@ class CatDescriptionGenerator {
             components.append("smoke fur")
         }
         
-        // 斑纹类型
-        if details.contains("鲭鱼斑纹理") {
+        // 斑纹类型 - 支持多种文本格式
+        if details.contains("鲭鱼斑纹理") || details.contains("鲭鱼斑纹纹理") {
             components.append("mackerel tabby")
-        } else if details.contains("古典斑纹理") {
+        } else if details.contains("古典斑纹理") || details.contains("古典斑纹纹理") {
             components.append("classic tabby")
-        } else if details.contains("点斑纹理") {
+        } else if details.contains("点斑纹理") || details.contains("点斑纹纹理") {
             components.append("spotted tabby")
-        } else if details.contains("细斑纹理") {
+        } else if details.contains("细斑纹理") || details.contains("细斑纹纹理") {
             components.append("ticked tabby")
+        } else if details.contains("无斑纹纯色") {
+            components.append("solid color")
         }
         
         // 覆盖度信息
@@ -124,35 +146,115 @@ class CatDescriptionGenerator {
             }
         }
         
-        // 白色分布 - 更详细的识别
-        if details.contains("白斑") || details.contains("白袜") {
+        // 白色分布 - 精确识别面部区域
+        if details.contains("白斑") || details.contains("白袜") || details.contains("白腿") || details.contains("白胸") || details.contains("白腹") {
+            // 身体白色部位
             if details.contains("身体白袜") {
                 components.append("white socks")
             }
-            if details.contains("面部白斑") {
-                components.append("white facial markings")
+            if details.contains("身体白腿") {
+                components.append("white legs")
             }
-            if details.contains("嘴周") {
-                components.append("white muzzle")
+            if details.contains("身体白胸") || details.contains("白胸") {
+                components.append("white chest")
             }
-            if details.contains("下巴") {
-                components.append("white chin")
+            if details.contains("身体白腹") || details.contains("白腹") {
+                components.append("white belly")
+            }
+            
+            // 精确的面部白斑区域识别
+            var specificFacialMarkings: [String] = []
+            
+            if details.contains("右眼圈") {
+                specificFacialMarkings.append("white right eye ring")
+            }
+            if details.contains("左眼圈") {
+                specificFacialMarkings.append("white left eye ring")
+            }
+            if details.contains("额头") {
+                specificFacialMarkings.append("white forehead")
             }
             if details.contains("鼻梁") {
-                components.append("white blaze")
+                specificFacialMarkings.append("white blaze")
             }
+            if details.contains("下巴") {
+                specificFacialMarkings.append("white chin")
+            }
+            if details.contains("嘴周") {
+                specificFacialMarkings.append("white muzzle")
+            }
+            if details.contains("左脸颊") {
+                specificFacialMarkings.append("white left cheek")
+            }
+            if details.contains("右脸颊") {
+                specificFacialMarkings.append("white right cheek")
+            }
+            
+            // 如果有具体的面部区域，使用具体描述；否则使用通用描述
+            if !specificFacialMarkings.isEmpty {
+                components.append(contentsOf: specificFacialMarkings)
+            } else if details.contains("面部白斑") {
+                components.append("white facial markings")
+            }
+            
+            // 其他部位
             if details.contains("胸部") {
                 components.append("white chest")
             }
         }
         
-        // 温度敏感效果
-        if details.contains("局部变浅") {
-            if details.contains("腹部") {
-                components.append("lighter belly")
-            } else {
-                components.append("temperature sensitive coloring")
+        // 温度敏感效果 - 完整识别所有部位和强度
+        if details.contains("局部变浅") || details.contains("局部变深") {
+            var temperatureComponents: [String] = []
+            
+            // 判断是变深还是变浅
+            let isDarken = details.contains("局部变深")
+            let effectPrefix = isDarken ? "darker" : "lighter"
+            
+            // 识别具体部位
+            if details.contains("面部") {
+                temperatureComponents.append("\(effectPrefix) face")
             }
+            if details.contains("耳朵") {
+                temperatureComponents.append("\(effectPrefix) ears")
+            }
+            if details.contains("身体") {
+                temperatureComponents.append("\(effectPrefix) body")
+            }
+            if details.contains("腹部") {
+                temperatureComponents.append("\(effectPrefix) belly")
+            }
+            if details.contains("四肢") {
+                temperatureComponents.append("\(effectPrefix) limbs")
+            }
+            if details.contains("尾巴") {
+                temperatureComponents.append("\(effectPrefix) tail")
+            }
+            
+            // 提取强度百分比
+            let intensityMatches = details.matches(for: #"\d+%强度"#)
+            if !intensityMatches.isEmpty {
+                let intensityText = intensityMatches.first ?? ""
+                let numberString = intensityText.replacingOccurrences(of: "%强度", with: "")
+                if let intensityValue = Int(numberString) {
+                    if intensityValue > 70 {
+                        temperatureComponents.append("strong temperature effect")
+                    } else if intensityValue > 40 {
+                        temperatureComponents.append("moderate temperature effect")
+                    } else {
+                        temperatureComponents.append("subtle temperature effect")
+                    }
+                }
+            }
+            
+            // 如果是暹罗猫样式的重点色（变深在四肢）
+            if isDarken && details.contains("四肢") && details.contains("面部") {
+                temperatureComponents.append("pointed coloration")
+                temperatureComponents.append("siamese-like pattern")
+            }
+            
+            // 添加所有温度相关的组件
+            components.append(contentsOf: temperatureComponents)
         }
         
         return components.joined(separator: ", ")

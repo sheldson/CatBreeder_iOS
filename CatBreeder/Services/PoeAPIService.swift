@@ -228,18 +228,68 @@ class PoeAPIService: ObservableObject {
     private func getAPIKey() -> String? {
         // 优先从环境变量获取（推荐方式）
         if let envKey = ProcessInfo.processInfo.environment["POE_API_KEY"] {
-            print("✅ [PoeAPIService] 使用环境变量中的API Key")
+            print("✅ [PoeAPIService] 使用系统环境变量中的API Key")
             return envKey
         }
         
-        // 从配置文件获取（备用方式）
+        // 尝试从.env文件读取
+        if let envFileKey = loadFromEnvFile() {
+            print("✅ [PoeAPIService] 使用.env文件中的API Key")
+            return envFileKey
+        }
+        
+        // 从配置文件获取（最后备用方式）
         let configKey = AppConfig.poeAPIKey
         if !configKey.isEmpty && configKey != "your_poe_api_key_here" {
-            print("⚠️ [PoeAPIService] 使用配置文件中的API Key（建议使用环境变量）")
+            print("⚠️ [PoeAPIService] 使用Config.swift中的API Key（不推荐）")
             return configKey
         }
         
-        print("❌ [PoeAPIService] 未找到API Key，请设置POE_API_KEY环境变量")
+        print("❌ [PoeAPIService] 未找到API Key")
+        print("   请设置环境变量: export POE_API_KEY=\"your_key\"")
+        print("   或创建.env文件: cp .env.example .env")
+        return nil
+    }
+    
+    private func loadFromEnvFile() -> String? {
+        // 尝试多个可能的路径
+        var possiblePaths: [String] = []
+        
+        // 开发环境路径
+        possiblePaths.append(Bundle.main.bundlePath.replacingOccurrences(of: "/build/Build/Products/Debug-iphonesimulator/CatBreeder.app", with: "") + "/.env")
+        
+        // 项目根目录相对路径 (安全处理可选类型)
+        if let resourcePath = Bundle.main.resourcePath {
+            possiblePaths.append(resourcePath.replacingOccurrences(of: "/build/Build/Products/Debug-iphonesimulator/CatBreeder.app", with: "") + "/.env")
+        }
+        
+        // 直接在项目目录查找
+        possiblePaths.append("/Users/sheldon/Desktop/CatBreeder_iOS/.env")
+        
+        var envContent: String?
+        for path in possiblePaths {
+            print("🔍 [PoeAPIService] 尝试读取.env文件: \(path)")
+            if let content = try? String(contentsOfFile: path, encoding: .utf8) {
+                print("✅ [PoeAPIService] 成功读取.env文件: \(path)")
+                envContent = content
+                break
+            }
+        }
+        
+        guard let content = envContent else {
+            print("❌ [PoeAPIService] 无法读取.env文件")
+            return nil
+        }
+        
+        let lines = content.components(separatedBy: .newlines)
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("POE_API_KEY=") && !trimmed.hasPrefix("#") {
+                let key = String(trimmed.dropFirst("POE_API_KEY=".count))
+                return key.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+            }
+        }
+        
         return nil
     }
     

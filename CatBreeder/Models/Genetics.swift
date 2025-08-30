@@ -44,12 +44,17 @@ enum Sex: String, CaseIterable, Codable {
     }
 }
 
-// MARK: - 基础颜色基因
+// MARK: - 基础颜色基因（基于真实猫咪遗传学）
+// O基因：位于X染色体，控制橙色
+// B基因：控制真黑色素（eumelanin）的深浅
+//   - B（显性）= 黑色
+//   - b（隐性）= 巧克力色（黑色素氧化）
+//   - b'（更隐性）= 肉桂色（黑色素进一步氧化）
 enum BaseColor: String, CaseIterable, Codable {
-    case black = "黑色"
-    case chocolate = "巧克力色"
-    case cinnamon = "肉桂色"
-    case red = "橙色"
+    case black = "黑色(B)"        // B基因显性
+    case chocolate = "巧克力色(b)" // b基因隐性
+    case cinnamon = "肉桂色(b')"   // b'基因更隐性
+    case red = "橙色(O)"          // O基因（性连锁）
     
     var hexColor: String {
         switch self {
@@ -61,11 +66,12 @@ enum BaseColor: String, CaseIterable, Codable {
     }
     
     var probability: Double {
+        // 基于真实猫咪颜色分布
         switch self {
-        case .black: return 0.50      // 50% - 最常见
-        case .red: return 0.35        // 35% - 常见
-        case .chocolate: return 0.10  // 10% - 少见
-        case .cinnamon: return 0.05   // 5% - 稀有
+        case .black: return 0.60      // 60% - B基因最常见
+        case .red: return 0.30        // 30% - O基因较常见
+        case .chocolate: return 0.08  // 8% - b基因较少见
+        case .cinnamon: return 0.02   // 2% - b'基因很稀有
         }
     }
     
